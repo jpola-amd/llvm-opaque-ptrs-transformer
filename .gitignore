@@ -1,0 +1,33 @@
+# Build directories
+build/
+dist/
+
+# IDE files
+.vs/
+.vscode/settings.json
+*.user
+*.vcxproj.user
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!*Config.cmake.in
+
+# Compiled files
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+*.o
+
+# Logs
+*.log
+
+# OS specific
+Thumbs.db
+.DS_Store

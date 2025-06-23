@@ -1,0 +1,52 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 19,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+        "name": "windows-msvc-debug",
+        "hidden": false,
+        "generator": "Visual Studio 17 2022",
+        "binaryDir": "${sourceDir}/build/${presetName}",
+        "cacheVariables": {
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+            "LLVM_ROOT_DIR": "D:/Sandbox/LLVM-src/16.0.6/dist-debug/lib/cmake/llvm",
+            "ZLIB_ROOT_DIR": "D:/vcpkg/installed/x64-windows",
+            "BUILD_TESTS": "ON",
+            "BUILD_EXAMPLES": "ON",
+            "CMAKE_INSTALL_PREFIX": "${sourceDir}/dist/${presetName}"
+        }
+        },
+         {
+        "name": "windows-msvc-release",
+        "hidden": false,
+        "generator": "Visual Studio 17 2022",
+        "binaryDir": "${sourceDir}/build/${presetName}",
+        "cacheVariables": {
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+            "LLVM_ROOT_DIR": "D:/Sandbox/LLVM-src/16.0.6/dist/lib/cmake/llvm",
+            "ZLIB_ROOT_DIR": "D:/vcpkg/installed/x64-windows",
+            "BUILD_TESTS": "ON",
+            "BUILD_EXAMPLES": "ON",
+            "CMAKE_INSTALL_PREFIX": "${sourceDir}/dist/${presetName}"
+        }
+        }
+    ],
+    "buildPresets": [
+        {
+        "name": "windows-debug",
+        "hidden": false,
+        "configurePreset": "windows-msvc-debug",
+        "configuration": "Debug"
+        },
+        {
+        "name": "windows-release",
+        "hidden": false,
+        "configurePreset": "windows-msvc-release",
+        "configuration": "Release"
+        }
+    ]
+}
