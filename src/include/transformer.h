@@ -63,13 +63,16 @@ namespace llvm_transformer {
         }
     };
 
-    enum class AMDGCNTarget {
-        GFX1100,
-        GFX1101,
-        GFX1102,
-        GFX1030,
-        GENERIC,
-        UNKNOWN
+    enum class AMDGCNTarget : unsigned{
+        GFX1030 = 1030,
+        GFX1100 = 1100,
+        GFX1101 = 1101,
+        GFX1102 = 1102,
+        GFX1151 = 1151,
+        GFX1200 = 1200,
+        GFX1201 = 1201,
+        GENERIC = 1,
+        GFX_INVALID = 0,
     };
 
     struct TransformOptions {

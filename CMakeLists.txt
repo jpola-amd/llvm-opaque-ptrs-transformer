@@ -9,35 +9,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
 
-# # HANDLE  ZLIB
-# if(NOT DEFINED ZLIB_ROOT_DIR)
-#     set(ZLIB_ROOT_DIR $ENV{ZLIB_ROOT_DIR})
-#     if(NOT ZLIB_ROOT_DIR)
-#         message(FATAL_ERROR "ZLIB_ROOT_DIR environment variable is not set")
-#     endif()
-# endif()
-# message(STATUS "Using ZLIB_ROOT_DIR: ${ZLIB_ROOT_DIR}")
-# set(ZLIB_INCLUDE_DIR ${ZLIB_ROOT_DIR}/include)
-
-
-# if(CMAKE_CONFIGURATION_TYPES)
-#     # Multi-config generator (Visual Studio)
-#     set(ZLIB_LIBRARY_DEBUG ${ZLIB_ROOT_DIR}/debug/lib/zlibd.lib)
-#     set(ZLIB_LIBRARY_RELEASE ${ZLIB_ROOT_DIR}/lib/zlib.lib)
-#     set(ZLIB_LIBRARY 
-#         debug ${ZLIB_LIBRARY_DEBUG}
-#         optimized ${ZLIB_LIBRARY_RELEASE}
-#     )
-# else()
-#     # Single config generator
-#     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-#         set(ZLIB_LIBRARY ${ZLIB_ROOT_DIR}/debug/lib/zlibd.lib)
-#     else()
-#         set(ZLIB_LIBRARY ${ZLIB_ROOT_DIR}/lib/zlib.lib)
-#     endif()
-# endif()
-
-
 # LLVM Config
 # Validate required variables
 if(NOT DEFINED LLVM_ROOT_DIR)

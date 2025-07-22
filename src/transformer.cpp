@@ -25,10 +25,13 @@ namespace llvm_transformer
 
     inline std::string getAMDGCNTargetFeatures(AMDGCNTarget target) {
         switch (target) {
+            case AMDGCNTarget::GFX1030: return "+gfx1030";
             case AMDGCNTarget::GFX1100: return "+gfx1100";
             case AMDGCNTarget::GFX1101: return "+gfx1101";
             case AMDGCNTarget::GFX1102: return "+gfx1102";
-            case AMDGCNTarget::GFX1030: return "+gfx1030";
+            case AMDGCNTarget::GFX1151: return "+gfx1151";
+            case AMDGCNTarget::GFX1200: return "+gfx1200";
+            case AMDGCNTarget::GFX1201: return "+gfx1201";
             case AMDGCNTarget::GENERIC:
             default:
                 return "+gfx1030"; // Default to a common target
