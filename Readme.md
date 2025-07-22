@@ -15,9 +15,8 @@ A C++ library for transforming LLVM IR with typed pointers to use opaque pointer
 ### Prerequisites
 
 - CMake 3.10+
-- LLVM 16 (both Debug and Release builds)
+- LLVM 16 (both Debug and Release builds, targets X86;AMDGCN;NVPTX, clang disabled)
 - Visual Studio 2022 (for Windows)
-- vcpkg (for dependencies like zlib)
 
 ### Quick Start
 

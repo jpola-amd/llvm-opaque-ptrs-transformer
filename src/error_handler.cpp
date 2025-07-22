@@ -26,38 +26,38 @@ std::string ErrorInfo::toString() const {
 }
 
 void ErrorHandler::addError(ErrorType type, const std::string& message, const std::string& details) {
-    addErrorInfo(type, ErrorSeverity::ERROR, message, details);
+    addErrorInfo(type, ErrorSeverity::S_ERROR, message, details);
 }
 
 void ErrorHandler::addWarning(ErrorType type, const std::string& message, const std::string& details) {
-    addErrorInfo(type, ErrorSeverity::WARNING, message, details);
+    addErrorInfo(type, ErrorSeverity::S_WARNING, message, details);
 }
 
 void ErrorHandler::addFatal(ErrorType type, const std::string& message, const std::string& details) {
-    addErrorInfo(type, ErrorSeverity::FATAL, message, details);
+    addErrorInfo(type, ErrorSeverity::S_FATAL, message, details);
 }
 
 void ErrorHandler::addError(ErrorType type, const std::string& message, size_t line, size_t column, const std::string& details) {
-    addErrorInfo(type, ErrorSeverity::ERROR, message, details, line, column);
+    addErrorInfo(type, ErrorSeverity::S_ERROR, message, details, line, column);
 }
 
 void ErrorHandler::addWarning(ErrorType type, const std::string& message, size_t line, size_t column, const std::string& details) {
-    addErrorInfo(type, ErrorSeverity::WARNING, message, details, line, column);
+    addErrorInfo(type, ErrorSeverity::S_WARNING, message, details, line, column);
 }
 
 bool ErrorHandler::hasErrors() const {
     return std::any_of(errors_.begin(), errors_.end(), 
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::ERROR; });
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_ERROR; });
 }
 
 bool ErrorHandler::hasWarnings() const {
     return std::any_of(errors_.begin(), errors_.end(), 
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::WARNING; });
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_WARNING; });
 }
 
 bool ErrorHandler::hasFatalErrors() const {
     return std::any_of(errors_.begin(), errors_.end(), 
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::FATAL; });
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_FATAL; });
 }
 
 bool ErrorHandler::hasAnyIssues() const {
@@ -66,17 +66,17 @@ bool ErrorHandler::hasAnyIssues() const {
 
 size_t ErrorHandler::getErrorCount() const {
     return std::count_if(errors_.begin(), errors_.end(), 
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::ERROR; });
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_ERROR; });
 }
 
 size_t ErrorHandler::getWarningCount() const {
     return std::count_if(errors_.begin(), errors_.end(), 
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::WARNING; });
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_WARNING; });
 }
 
 size_t ErrorHandler::getFatalErrorCount() const {
     return std::count_if(errors_.begin(), errors_.end(), 
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::FATAL; });
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_FATAL; });
 }
 
 std::vector<ErrorInfo> ErrorHandler::getErrorsByType(ErrorType type) const {
@@ -96,7 +96,7 @@ std::vector<ErrorInfo> ErrorHandler::getErrorsBySeverity(ErrorSeverity severity)
 std::string ErrorHandler::getFormattedErrors() const {
     std::ostringstream oss;
     for (const auto& error : errors_) {
-        if (error.severity == ErrorSeverity::ERROR || error.severity == ErrorSeverity::FATAL) {
+        if (error.severity == ErrorSeverity::S_ERROR || error.severity == ErrorSeverity::S_FATAL) {
             oss << error.toString() << "\n";
         }
     }
@@ -106,7 +106,7 @@ std::string ErrorHandler::getFormattedErrors() const {
 std::string ErrorHandler::getFormattedWarnings() const {
     std::ostringstream oss;
     for (const auto& error : errors_) {
-        if (error.severity == ErrorSeverity::WARNING) {
+        if (error.severity == ErrorSeverity::S_WARNING) {
             oss << error.toString() << "\n";
         }
     }
@@ -139,13 +139,13 @@ void ErrorHandler::clear() {
 
 void ErrorHandler::clearWarnings() {
     errors_.erase(std::remove_if(errors_.begin(), errors_.end(),
-        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::WARNING; }),
+        [](const ErrorInfo& info) { return info.severity == ErrorSeverity::S_WARNING; }),
         errors_.end());
 }
 
 void ErrorHandler::clearErrors() {
     errors_.erase(std::remove_if(errors_.begin(), errors_.end(),
-        [](const ErrorInfo& info) { return info.severity != ErrorSeverity::WARNING; }),
+        [](const ErrorInfo& info) { return info.severity != ErrorSeverity::S_WARNING; }),
         errors_.end());
 }
 
@@ -162,9 +162,9 @@ std::string ErrorHandler::errorTypeToString(ErrorType type) {
 
 std::string ErrorHandler::severityToString(ErrorSeverity severity) {
     switch (severity) {
-        case ErrorSeverity::WARNING: return "WARNING";
-        case ErrorSeverity::ERROR: return "ERROR";
-        case ErrorSeverity::FATAL: return "FATAL";
+        case ErrorSeverity::S_WARNING: return "WARNING";
+        case ErrorSeverity::S_ERROR: return "ERROR";
+        case ErrorSeverity::S_FATAL: return "FATAL";
         default: return "UNKNOWN";
     }
 }

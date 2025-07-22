@@ -39,9 +39,9 @@ enum class ErrorType {
 };
 
 enum class ErrorSeverity {
-    WARNING,
-    ERROR,
-    FATAL
+    S_WARNING,
+    S_ERROR,
+    S_FATAL
 };
 
 struct ErrorInfo {
