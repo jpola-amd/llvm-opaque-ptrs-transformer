@@ -50,8 +50,6 @@ ctest
 Update the paths in `CMakePresets.json` to match your environment:
 - `LLVM_ROOT_DIR_DEBUG`: Path to debug LLVM cmake files
 - `LLVM_ROOT_DIR_RELEASE`: Path to release LLVM cmake files  
-- `ZLIB_ROOT_DIR`: Path to zlib installation
-
 ## Usage
 
 ```cpp

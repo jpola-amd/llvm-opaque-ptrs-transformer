@@ -2,24 +2,39 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "(Example - Debug) transform example",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/windows-msvc-debug/examples/Debug/transoform.exe",
+      "args": [
+        "${workspaceFolder}/build/windows-msvc-debug/tests/resources/after_substitution.1.ptx.ll",
+        "${workspaceFolder}//build/windows-msvc-debug/examples/Debug/after_substitution.ptrs.ptx.ll"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [],
+      "console": "externalTerminal"
+    },
+    
+    {
       "name": "Debug test_transformer",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/windows-msvc-debug/tests/Debug/test_transformer.exe",
       "args": [],
       "stopAtEntry": false,
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/build/windows-msvc-debug/tests/",
       "environment": [],
       "console": "integratedTerminal",
     },
     {
-      "name": "Debug test_transformer (Release)",
+      "name": "test_transformer (Release)",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/windows-msvc-release/tests/Release/test_transformer.exe",
       "args": [],
       "stopAtEntry": false,
-      "cwd": "${workspaceFolder}",
+       "cwd": "${workspaceFolder}/build/windows-msvc-release/tests/",
       "environment": [],
       "console": "integratedTerminal",
     }

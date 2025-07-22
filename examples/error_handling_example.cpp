@@ -19,7 +19,7 @@ entry:
     
     if (result.hasValue()) {
         std::cout << "SUCCESS: Transformation completed!\n";
-        std::cout << "Output length: " << result.getValue().length() << " characters\n";
+        std::cout << "Output length: " << result.getValue().as_text().size() << " characters\n";
         
         // Print warnings if any
         if (result.getErrorHandler().hasWarnings()) {

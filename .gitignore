@@ -31,3 +31,7 @@ Makefile
 # OS specific
 Thumbs.db
 .DS_Store
+
+# llvm deps
+deps/llvm-release/
+deps/llvm-debug/

@@ -121,6 +121,7 @@ private:
 template<typename T>
 class Result {
 public:
+
     Result(T&& value) : value_(std::move(value)), has_value_(true) {}
     Result(const T& value) : value_(value), has_value_(true) {}
     Result(ErrorHandler&& error_handler) : error_handler_(std::move(error_handler)), has_value_(false) {}
@@ -128,7 +129,7 @@ public:
     
     bool hasValue() const { return has_value_; }
     bool hasError() const { return !has_value_; }
-    
+
     const T& getValue() const { 
         if (!has_value_) throw std::runtime_error("Attempting to get value from failed result");
         return value_; 
@@ -138,7 +139,17 @@ public:
         if (!has_value_) throw std::runtime_error("Attempting to get value from failed result");
         return value_; 
     }
-    
+
+    void setBinaryData(uint8_t* data, size_t size) {
+        if (size == 0) {
+            throw std::invalid_argument("Binary data size cannot be zero");
+        }
+        binary_data_.clear();
+        binary_data_.reserve(size);
+        binary_data_.assign(data, data + size);
+        has_binary_ = true; 
+    }
+
     const ErrorHandler& getErrorHandler() const { return error_handler_; }
     ErrorHandler& getErrorHandler() { return error_handler_; }
     
@@ -149,8 +160,10 @@ public:
 
 private:
     T value_{};
+   
     ErrorHandler error_handler_;
     bool has_value_;
+    bool has_binary_ = false; // Indicates if the result contains binary data
 };
 
 // Validation result structure

@@ -7,7 +7,7 @@ add_library(${target_name} STATIC
  error_handler.cpp
 )
 
-llvm_map_components_to_libnames(llvm_libs support core irreader)
+llvm_map_components_to_libnames(llvm_libs support core irreader bitwriter)
 
 message(STATUS "LLVM libraries: ${llvm_libs}")
 
