@@ -1,12 +1,51 @@
 #include <gtest/gtest.h>
 #include <string_view>
 #include <string>
+#include <fstream>
+#include <chrono>
+#include <filesystem>
 
 // Include your transformer header
 #include "transformer.h"
 #include "error_handler.h"
 
 using namespace llvm_transformer;
+
+std::string load_test_resource(const std::string& filename) {
+    // Load the test resource from the resources directory
+    std::cerr << "PWD: " << std::filesystem::current_path() << std::endl;
+    std::string file_path = "resources/" + filename;
+    std::ifstream file(file_path);
+
+    if (!file) {
+        throw std::runtime_error("Failed to open test resource: " + file_path);
+    }
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return content;
+}
+
+void save_result_to_file(const std::filesystem::path& file_path, const TransformResult& content) {
+
+    auto mode = std::ios::out | std::ios::trunc;
+    if (content.is_bitcode()) {
+        mode |= std::ios::binary;
+    }
+
+    std::ofstream file(file_path, mode);
+    if (!file.is_open()) {
+        throw std::runtime_error("Could not open file for writing: " + file_path.string());
+    }
+
+    if (content.is_text()) {
+        file << content.as_text();
+    } else if (content.is_bitcode()) {
+        file.write(reinterpret_cast<const char*>(content.as_bitcode().data()), content.as_bitcode().size());
+    } else {
+        throw std::runtime_error("Unsupported content format for saving");
+    }
+    
+}
 
 class OpaquePointerTransformerTest : public ::testing::Test {
 protected:
@@ -46,11 +85,11 @@ entry:
   ret i32 %loaded
 }
 )";
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_TRUE(containsOpaquePointers(result.getValue())) << "Result should contain opaque pointers";
-    EXPECT_FALSE(containsTypedPointers(result.getValue())) << "Result should not contain typed pointers";
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text())) << "Result should contain opaque pointers";
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text())) << "Result should not contain typed pointers";
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformWithAlloca) {
@@ -63,12 +102,12 @@ entry:
 }
 )";
 
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformWithGEP) {
@@ -83,12 +122,12 @@ entry:
 }
 )";
 
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformWithPHINodes) {
@@ -111,12 +150,12 @@ merge:
 )";
 
     
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformWithCalls) {
@@ -130,12 +169,12 @@ entry:
 }
 )";
 
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformAlreadyOpaquePointers) {
@@ -147,18 +186,18 @@ entry:
 }
 )";
 
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformEmptyModule) {
     std::string_view input_ir = "";
     
     
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasError()) << "Transformation should fail for empty input";   
 }
@@ -166,7 +205,7 @@ TEST_F(OpaquePointerTransformerTest, TransformEmptyModule) {
 TEST_F(OpaquePointerTransformerTest, TransformInvalidIR) {
     std::string_view input_ir = "invalid llvm ir code here";
     
-     Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+     Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     // Should handle invalid IR gracefully by returning false
     EXPECT_TRUE(result.hasError()) << "Transformation should fail for invalid IR";
@@ -194,16 +233,16 @@ entry:
 }
 )";
 
-    Result<std::string> result =  llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result =  llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
     
     // Should contain both functions
-    EXPECT_TRUE(result.getValue().find("create_node") != std::string::npos);
-    EXPECT_TRUE(result.getValue().find("get_value") != std::string::npos);
+    EXPECT_TRUE(result.getValue().as_text().find("create_node") != std::string::npos);
+    EXPECT_TRUE(result.getValue().as_text().find("get_value") != std::string::npos);
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformWithArrays) {
@@ -216,12 +255,12 @@ entry:
 }
 )";
 
-    Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 TEST_F(OpaquePointerTransformerTest, TransformWithReturnPointer) {
@@ -232,12 +271,12 @@ entry:
 }
 )";
 
-     Result<std::string> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
+     Result<TransformResult> result = llvm_transformer::transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
 }
 
 // Test the new error handling version
@@ -250,11 +289,11 @@ entry:
 }
 )";
 
-     Result<std::string> result = transform_llvm_ir_to_opaque_pointers(input_ir);
+     Result<TransformResult> result = transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
     if (result.hasValue()) {
-        EXPECT_FALSE(result.getValue().empty());
+        EXPECT_FALSE(result.getValue().as_text().empty());
     }
 }
 
@@ -289,15 +328,15 @@ attributes #0 = { nofree nounwind willreturn "no-trapping-math"="true" "stack-pr
 !2 = distinct !{!2, !"_ZN5state6normalEv"}
 )";
 
-    Result<std::string> result = transform_llvm_ir_to_opaque_pointers(input_ir);
+    Result<TransformResult> result = transform_llvm_ir_to_opaque_pointers(input_ir);
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
-    EXPECT_FALSE(result.getValue().empty());
-    EXPECT_TRUE(containsOpaquePointers(result.getValue()));
-    EXPECT_FALSE(containsTypedPointers(result.getValue()));
+    EXPECT_FALSE(result.getValue().as_text().empty());
+    EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text()));
+    EXPECT_FALSE(containsTypedPointers(result.getValue().as_text()));
     
     // Check if the function is transformed correctly
-    EXPECT_TRUE(result.getValue().find("tint") != std::string::npos) << "Transformed IR should contain the function 'tint'";
+    EXPECT_TRUE(result.getValue().as_text().find("tint") != std::string::npos) << "Transformed IR should contain the function 'tint'";
 }
 
 
@@ -340,4 +379,87 @@ source_filename = "test.c"
     
     auto errors = result.getErrorHandler().getErrorsByType(ErrorType::VALIDATION_ERROR);
     EXPECT_FALSE(errors.empty());
+}
+
+
+
+
+
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_BeforeReplace) {
+    // The resources are now copied to the build directory
+
+   std::string input_ir = load_test_resource("before_replace.ptx.ll");
+    
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+    
+    // Transform to opaque pointers
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file";
+    if (result.hasValue()) {
+        EXPECT_FALSE(result.getValue().as_text().empty());
+        EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text())) 
+            << "Result should contain opaque pointers";
+        
+        // Check that key functions are preserved
+        EXPECT_TRUE(result.getValue().as_text().find("evalGLSL") != std::string::npos)
+            << "Function evalGLSL should be preserved";
+    }
+}
+
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_AfterSubstitution) {
+    std::string resource_path = "resources/after_substitution.1.ptx.ll";
+
+    std::string input_ir = load_test_resource("after_substitution.1.ptx.ll");        
+    
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+    
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for after_substitution file";
+    if (result.hasValue()) {
+        EXPECT_FALSE(result.getValue().as_text().empty());
+        EXPECT_TRUE(containsOpaquePointers(result.getValue().as_text())) 
+            << "Result should contain opaque pointers";
+        
+        // Check that key functions are preserved
+        EXPECT_TRUE(result.getValue().as_text().find("evalGLSL") != std::string::npos)
+            << "Function evalGLSL should be preserved";
+    }
+}
+
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_Performance) {
+    std::string input_ir = load_test_resource("before_replace.ptx.ll"); 
+    // Measure transformation time
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir);
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed";
+    EXPECT_LT(duration.count(), 5000) << "Transformation should complete within 5 seconds";
+    
+    std::cout << "Transformation took: " << duration.count() << " ms" << std::endl;
+}
+
+
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_SaveBitcode) {
+
+    std::string input_ir = load_test_resource("before_replace.ptx.ll");
+    
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+    
+    // Set options to output bitcode
+    TransformOptions options;
+    options.output_bitcode = true; // Enable bitcode output
+     options.amdgcn_target = AMDGCNTarget::GFX1030;
+    options.remove_compiler_info = true;
+    
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+
+    save_result_to_file ("bitcode.gfx1030.bc", result.getValue());
+
 }

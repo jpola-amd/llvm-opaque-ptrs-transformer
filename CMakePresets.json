@@ -13,8 +13,7 @@
         "binaryDir": "${sourceDir}/build/${presetName}",
         "cacheVariables": {
             "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
-            "LLVM_ROOT_DIR": "D:/Sandbox/LLVM-src/16.0.6/dist-debug/lib/cmake/llvm",
-            "ZLIB_ROOT_DIR": "D:/vcpkg/installed/x64-windows",
+            "LLVM_ROOT_DIR": "${sourceDir}/deps/llvm-debug/lib/cmake/llvm",
             "BUILD_TESTS": "ON",
             "BUILD_EXAMPLES": "ON",
             "CMAKE_INSTALL_PREFIX": "${sourceDir}/dist/${presetName}"
@@ -27,8 +26,7 @@
         "binaryDir": "${sourceDir}/build/${presetName}",
         "cacheVariables": {
             "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
-            "LLVM_ROOT_DIR": "D:/Sandbox/LLVM-src/16.0.6/dist/lib/cmake/llvm",
-            "ZLIB_ROOT_DIR": "D:/vcpkg/installed/x64-windows",
+            "LLVM_ROOT_DIR": "${sourceDir}/deps/llvm-release/lib/cmake/llvm",
             "BUILD_TESTS": "ON",
             "BUILD_EXAMPLES": "ON",
             "CMAKE_INSTALL_PREFIX": "${sourceDir}/dist/${presetName}"
