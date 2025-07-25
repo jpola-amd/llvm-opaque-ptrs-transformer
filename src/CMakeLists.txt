@@ -10,6 +10,10 @@ add_library(${target_name} STATIC
  transformer.cpp
  error_handler.cpp
 )
+set_target_properties(${test_target} PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
 
 llvm_map_components_to_libnames(llvm_libs support core irreader bitwriter)
 

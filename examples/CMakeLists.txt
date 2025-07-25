@@ -3,6 +3,10 @@ set(target_example example_transformer)
 add_executable(${target_example}
     error_handling_example.cpp
 )
+set_target_properties(${test_target} PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
 
 target_link_libraries(${target_example} PRIVATE
     ToOpaquePtrsTransformer
