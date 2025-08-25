@@ -125,8 +125,15 @@ namespace llvm_transformer
         }
     }
 */
-    
-     static void cleanModuleForAMDGCN(llvm::Module* module, const TransformOptions& options) {
+
+    // On windows the hiprtc compiler 
+    void setWcharSizeFlagForHIP(llvm::Module* module, size_t wchar_size = 2) {
+        llvm::LLVMContext& ctx = module->getContext();
+        module->addModuleFlag(llvm::Module::Override, "wchar_size",
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), wchar_size));
+    }
+
+    static void cleanModuleForAMDGCN(llvm::Module* module, const TransformOptions& options) {
         if (!module) return;
         
         // 1. Remove NVIDIA-specific metadata
@@ -547,6 +554,8 @@ namespace llvm_transformer
         if (options.debug_switch_statements) {
             enableDebugSwitchStatements(module.get(), options.kernel_function_name);
         }
+
+        setWcharSizeFlagForHIP(module.get(), 2);
 
         TransformResult result;
         
