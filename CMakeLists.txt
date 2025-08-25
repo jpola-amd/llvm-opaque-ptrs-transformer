@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(BUILD_TESTS "Build tests" ON)
-option(BUILD_EXAMPLES "Build examples" ON)
-option(BUILD_HIP_RUNNER "Build HIP runner" ON)
+option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_EXAMPLES "Build examples" OFF)
+option(BUILD_HIP_RUNNER "Build HIP runner" OFF)
+option("BUILD_FOR_VRAY" "Specific setup for VRAY" OFF)
 
 if(NOT DEFINED LLVM_ROOT_DIR)
     message(FATAL_ERROR "LLVM_ROOT_DIR is not set")

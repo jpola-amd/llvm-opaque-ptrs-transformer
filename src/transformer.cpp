@@ -49,88 +49,36 @@ namespace llvm_transformer
         return "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9";
 
     }
-    
-/*    static void cleanModuleForTargetIndependence(llvm::Module* module, const TransformOptions& options = {}) {
+
+    void overrideWcharSizeFlag(llvm::Module* module, size_t wchar_size = 2) {
         if (!module) return;
-        
-        // 1. Remove NVIDIA-specific metadata
-        if (auto nvvm_annotations = module->getNamedMetadata("nvvm.annotations")) {
-            module->eraseNamedMetadata(nvvm_annotations);
-        }
-        
-        if (auto nvvmir_version = module->getNamedMetadata("nvvmir.version")) {
-            module->eraseNamedMetadata(nvvmir_version);
-        }
 
-         // 2. Set AMDGCN target triple
-        if (!options.target_triple.empty()) {
-            module->setTargetTriple(options.target_triple);
-        } else {
-            module->setTargetTriple(getAMDGCNTargetTriple());
-        }
-        
-        // 3. Clean target-specific function attributes
-        for (auto& function : *module) {
-            if (function.isDeclaration()) continue;
-            
-            // Remove PTX-specific attributes
-            function.removeFnAttr("target-features");
-            
-            // // Remove other target-specific attributes
-            // function.removeFnAttr("disable-tail-calls");
-            // function.removeFnAttr("frame-pointer");
-            // function.removeFnAttr("less-precise-fpmad");
-            // function.removeFnAttr("no-infs-fp-math");
-            // function.removeFnAttr("no-jump-tables");
-            // function.removeFnAttr("no-nans-fp-math");
-            // function.removeFnAttr("no-signed-zeros-fp-math");
-            // function.removeFnAttr("unsafe-fp-math");
-            // function.removeFnAttr("use-soft-float");
-            
-            // Keep important optimization attributes
-            // function.addFnAttr(llvm::Attribute::AlwaysInline); // if needed
-
-            std::string target_features = options.target_features;
-            if (target_features.empty()) {
-                target_features = getAMDGCNTargetFeatures(options.target);
-            }
-            function.addFnAttr("target-features", target_features);
-        
-
-            // Convert main kernel function to amdgpu_kernel
-            if (function.getName() == options.kernel_function_name) {
-                // Change calling convention to AMDGPU kernel
-                function.setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
-                
-                // Add kernel-specific attributes
-                //function.addFnAttr("amdgpu-flat-work-group-size", "1,256");
-                function.addFnAttr("target-cpu", 
-                    getAMDGCNTargetFeatures(options.target).substr(1)); // Remove '+'
-                
-                // Remove function attributes that don't make sense for kernels
-                function.removeFnAttr(llvm::Attribute::AlwaysInline);
-                
-                // Ensure proper linkage for kernel
-                if (function.hasInternalLinkage()) {
-                    function.setLinkage(llvm::GlobalValue::ExternalLinkage);
-                }
-            }
-        }
-        
-        // 4. Clean up compiler identification metadata
-        if (options.remove_compiler_info) {
-            if (auto llvm_ident = module->getNamedMetadata("llvm.ident")) {
-                module->eraseNamedMetadata(llvm_ident);
-            }
-        }
-    }
-*/
-
-    // On windows the hiprtc compiler 
-    void setWcharSizeFlagForHIP(llvm::Module* module, size_t wchar_size = 2) {
         llvm::LLVMContext& ctx = module->getContext();
-        module->addModuleFlag(llvm::Module::Override, "wchar_size",
-        llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), wchar_size));
+
+        // Remove existing wchar_size module flags
+        llvm::NamedMDNode* flags = module->getModuleFlagsMetadata();
+        if (flags) {
+            std::vector<llvm::MDNode*> keep; // which one to keep in module
+            for (unsigned i = 0; i < flags->getNumOperands(); ++i) {
+                llvm::MDNode* flag = flags->getOperand(i);
+                if (flag->getNumOperands() >= 2) {
+                    if (auto* str_md = llvm::dyn_cast<llvm::MDString>(flag->getOperand(1))) {
+                        if (str_md->getString() == "wchar_size") { // Found wchar_size flag
+                            continue;
+                        }
+                    }
+                }
+                keep.push_back(flag); // keep all others
+            }
+            flags->clearOperands();
+            for (auto* flag : keep) {
+                flags->addOperand(flag);
+            }
+        }
+
+        // Add the new wchar_size flag
+        module->addModuleFlag(llvm::Module::Error, "wchar_size",
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), wchar_size));
     }
 
     static void cleanModuleForAMDGCN(llvm::Module* module, const TransformOptions& options) {
@@ -555,7 +503,7 @@ namespace llvm_transformer
             enableDebugSwitchStatements(module.get(), options.kernel_function_name);
         }
 
-        setWcharSizeFlagForHIP(module.get(), 2);
+        overrideWcharSizeFlag(module.get(), 2);
 
         TransformResult result;
         
