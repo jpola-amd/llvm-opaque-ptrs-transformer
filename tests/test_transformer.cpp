@@ -453,7 +453,7 @@ TEST_F(OpaquePointerTransformerTest, TransformRealFile_SaveBitcode) {
     // Set options to output bitcode
     TransformOptions options;
     options.output_bitcode = true; // Enable bitcode output
-     options.amdgcn_target = AMDGCNTarget::GFX1030;
+    options.amdgcn_target = AMDGCNTarget::GFX1030;
     options.remove_compiler_info = true;
     
     auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
@@ -461,5 +461,50 @@ TEST_F(OpaquePointerTransformerTest, TransformRealFile_SaveBitcode) {
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
 
     save_result_to_file ("bitcode.gfx1030.bc", result.getValue());
+
+}
+ 
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_AddDebugSwitchStatementsIR) {
+
+    std::string input_ir = load_test_resource("before_replace.ptx.ll");
+    
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+    
+    // Set options to output bitcode
+    TransformOptions options;
+    options.output_bitcode = false; // Keep text IR output
+    options.kernel_function_name = "evalGLSL"; // Set the kernel function name
+    options.amdgcn_target = AMDGCNTarget::GFX1030;
+    options.remove_compiler_info = true;
+    options.debug_switch_statements = true; 
+    
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+
+    save_result_to_file ("bitcode.debug_switch.gfx1030.ll", result.getValue());
+
+}
+
+
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_AddDebugSwitchStatementsBitcode) {
+
+    std::string input_ir = load_test_resource("before_replace.ptx.ll");
+    
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+    
+    // Set options to output bitcode
+    TransformOptions options;
+    options.output_bitcode = true; // Keep text IR output
+    options.kernel_function_name = "evalGLSL"; // Set the kernel function name
+    options.amdgcn_target = AMDGCNTarget::GFX1030;
+    options.remove_compiler_info = true;
+    options.debug_switch_statements = true; 
+    
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+
+    save_result_to_file ("bitcode.debug_switch.gfx1030.bc", result.getValue());
 
 }

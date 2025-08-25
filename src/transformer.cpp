@@ -8,15 +8,18 @@ The input is a string view of the llvm-ir file, and the output is a new string t
 #include "include/transformer.h"
 #include "include/error_handler.h"
 
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/Support/raw_ostream.h>
+
 #include <string_view>
 #include <memory>
 
@@ -316,6 +319,204 @@ namespace llvm_transformer
         return Result<ModuleValidationResult>(std::move(validation_result));
     }
 
+    /*
+    // The following functions are for inserting AMD GPU printf calls
+    // They mimic the __ockl_printf_* functions used in AMD GPU assembly.
+    
+    declare i64 @__ockl_printf_begin(i64)
+
+    declare i64 @__ockl_printf_append_string_n(i64, ptr, i64, i32)
+
+    declare i64 @__ockl_printf_append_args(i64, i32, i64, i64, i64, i64, i64, i64, i64, i32)
+    */
+
+    static void insertAMDGPUPrintf(llvm::IRBuilder<>& builder, llvm::Module* module, 
+                                   const std::string& format_str, llvm::Value* int_arg) {
+        llvm::LLVMContext& context = module->getContext();
+        
+        // Get or create __ockl_printf_* function declarations
+        llvm::FunctionType* printf_begin_type = llvm::FunctionType::get(
+            llvm::Type::getInt64Ty(context), 
+            {llvm::Type::getInt64Ty(context)}, 
+            false
+        );
+        
+        llvm::Function* printf_begin_func = module->getFunction("__ockl_printf_begin");
+        if (!printf_begin_func) {
+            printf_begin_func = llvm::Function::Create(
+                printf_begin_type, 
+                llvm::Function::ExternalLinkage, 
+                "__ockl_printf_begin", 
+                *module
+            );
+        }
+
+        llvm::FunctionType* printf_append_string_type = llvm::FunctionType::get(
+            llvm::Type::getInt64Ty(context),
+            {llvm::Type::getInt64Ty(context), llvm::Type::getInt8PtrTy(context), 
+             llvm::Type::getInt64Ty(context), llvm::Type::getInt32Ty(context)},
+            false
+        );
+        
+        llvm::Function* printf_append_string_func = module->getFunction("__ockl_printf_append_string_n");
+        if (!printf_append_string_func) {
+            printf_append_string_func = llvm::Function::Create(
+                printf_append_string_type,
+                llvm::Function::ExternalLinkage,
+                "__ockl_printf_append_string_n",
+                *module
+            );
+        }
+
+        llvm::FunctionType* printf_append_args_type = llvm::FunctionType::get(
+            llvm::Type::getInt64Ty(context),
+            {llvm::Type::getInt64Ty(context), llvm::Type::getInt32Ty(context),
+             llvm::Type::getInt64Ty(context), llvm::Type::getInt64Ty(context),
+             llvm::Type::getInt64Ty(context), llvm::Type::getInt64Ty(context),
+             llvm::Type::getInt64Ty(context), llvm::Type::getInt64Ty(context),
+             llvm::Type::getInt64Ty(context), llvm::Type::getInt32Ty(context)},
+            false
+        );
+        
+        llvm::Function* printf_append_args_func = module->getFunction("__ockl_printf_append_args");
+        if (!printf_append_args_func) {
+            printf_append_args_func = llvm::Function::Create(
+                printf_append_args_type,
+                llvm::Function::ExternalLinkage,
+                "__ockl_printf_append_args",
+                *module
+            );
+        }
+
+        // Create global string constant in addrspace(4) - like @.str in device_code.ll
+        llvm::ArrayType* string_type = llvm::ArrayType::get(
+            llvm::Type::getInt8Ty(context), 
+            format_str.length() + 1
+        );
+        llvm::Constant* string_constant = llvm::ConstantDataArray::getString(context, format_str, true);
+        
+        llvm::GlobalVariable* global_string = new llvm::GlobalVariable(
+            *module,
+            string_type,
+            true, // isConstant
+            llvm::GlobalValue::PrivateLinkage,
+            string_constant,
+            ".str.debug",
+            nullptr,
+            llvm::GlobalVariable::NotThreadLocal,
+            4 // addrspace(4) - same as @.str in device_code.ll
+        );
+        global_string->setAlignment(llvm::Align(1));
+        global_string->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+        // Step 1: Begin printf - call __ockl_printf_begin(i64 0)
+        llvm::Value* printf_handle = builder.CreateCall(printf_begin_func, {builder.getInt64(0)});
+        
+        // Step 2: Calculate string length and create addrspacecast
+        // This mimics: addrspacecast (ptr addrspace(4) @.str to ptr)
+        llvm::Value* string_ptr = builder.CreateAddrSpaceCast(
+            global_string, 
+            llvm::Type::getInt8PtrTy(context)
+        );
+        
+        // String length calculation (simpler version than device_code.ll's loop)
+        llvm::Value* string_len = builder.getInt64(format_str.length());
+        
+        // Step 3: Append string - call __ockl_printf_append_string_n
+        llvm::Value* printf_handle2 = builder.CreateCall(printf_append_string_func, {
+            printf_handle, 
+            string_ptr, 
+            string_len, 
+            builder.getInt32(0)
+        });
+        
+        // Step 4: Append integer argument - call __ockl_printf_append_args
+        llvm::Value* int_arg_64 = builder.CreateZExt(int_arg, llvm::Type::getInt64Ty(context));
+        builder.CreateCall(printf_append_args_func, {
+            printf_handle2,
+            builder.getInt32(1), // number of args
+            int_arg_64,          // first argument (zext i32 to i64)
+            builder.getInt64(0), // remaining 7 args are 0
+            builder.getInt64(0),
+            builder.getInt64(0),
+            builder.getInt64(0),
+            builder.getInt64(0),
+            builder.getInt64(0),
+            builder.getInt32(1)  // final i32 parameter
+        });
+    }
+
+    static void enableDebugSwitchStatements(llvm::Module* module, const std::string& kernel_function_name) {
+        if (!module) return;
+
+        if (kernel_function_name.empty()) {
+            llvm::errs() << "Kernel function name is empty, cannot enable debug switch statements.\n";
+            return;
+        }
+
+        // find the desired function
+        llvm::Function* kernel_function = module->getFunction(kernel_function_name);
+        if (!kernel_function) {
+            llvm::errs() << "Kernel function '" << kernel_function_name << "' not found in module.\n";
+            return;
+        }
+
+        // Get or create printf function declaration
+        llvm::LLVMContext& context = module->getContext();
+        llvm::FunctionType* printf_type = llvm::FunctionType::get(
+            llvm::Type::getInt32Ty(context), 
+            llvm::Type::getInt8PtrTy(context), 
+            true // varargs
+        );
+        
+        llvm::Function* printf_func = module->getFunction("printf");
+        if (!printf_func) {
+            printf_func = llvm::Function::Create(
+                printf_type, 
+                llvm::Function::ExternalLinkage, 
+                "printf", 
+                *module
+            );
+        }
+
+        // Find the single switch statement in the function
+        llvm::SwitchInst* switch_inst = nullptr;
+        for (auto& BB : *kernel_function) {
+            for (auto& I : BB) {
+                if (auto* SI = llvm::dyn_cast<llvm::SwitchInst>(&I)) {
+                    switch_inst = SI;
+                    break;
+                }
+            }
+            if (switch_inst) break;
+        }
+        
+        if (!switch_inst) {
+            llvm::outs() << "No switch statement found in function '" << kernel_function_name << "'\n";
+            return;
+        }
+        
+        // Create IRBuilder positioned before the switch instruction
+        llvm::IRBuilder<> builder(switch_inst);
+        
+        // Create format string with case values for better debugging
+        std::string format_str = "Switch condition: %d (cases: ";
+        for (auto case_it = switch_inst->case_begin(); case_it != switch_inst->case_end(); ++case_it) {
+            int64_t case_value = case_it->getCaseValue()->getSExtValue();
+            format_str += std::to_string(case_value) + ",";
+        }
+        format_str += "default)\\n";
+        
+        llvm::Value* format_string = builder.CreateGlobalStringPtr(format_str);
+        
+        // Get the switch condition value and insert printf call
+        llvm::Value* switch_condition = switch_inst->getCondition();
+        builder.CreateCall(printf_func, {format_string, switch_condition});
+        
+        llvm::outs() << "Successfully added debug printf for switch statement in function '" 
+                     << kernel_function_name << "'\n";
+    }
+
     static inline Result<TransformResult> transform(const std::string_view& input_ir, llvm::LLVMContext& context, ErrorHandler& error_handler, const TransformOptions& options = {})
     {       
         if (input_ir.empty()) {
@@ -343,6 +544,10 @@ namespace llvm_transformer
             cleanModuleForTargetIndependence(module.get(), options);
         }
 
+        if (options.debug_switch_statements) {
+            enableDebugSwitchStatements(module.get(), options.kernel_function_name);
+        }
+
         TransformResult result;
         
         if (options.output_bitcode) {
@@ -365,7 +570,6 @@ namespace llvm_transformer
         
          return Result<TransformResult>(std::move(result));
     }
-
 
     Result<TransformResult> transform_llvm_ir_to_opaque_pointers(const std::string_view& input_ir, const TransformOptions& options)
     {

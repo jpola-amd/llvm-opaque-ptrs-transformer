@@ -82,7 +82,8 @@ namespace llvm_transformer {
         std::string target_features = "";
         AMDGCNTarget amdgcn_target = AMDGCNTarget::GENERIC;
         std::string kernel_function_name = "evalGLSL";
-        bool output_bitcode = false; // <-- Add this line
+        bool output_bitcode = false;
+        bool debug_switch_statements = false;
     };
    
     /**
