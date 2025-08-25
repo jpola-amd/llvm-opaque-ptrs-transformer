@@ -37,6 +37,27 @@
        "cwd": "${workspaceFolder}/build/windows-msvc-release/tests/",
       "environment": [],
       "console": "integratedTerminal",
+    },
+    {
+      "name": "hip_runner (Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/windows-msvc-debug/hip_runner/Debug/hip_runner.exe",
+      "args": [
+        "D:\\Sandbox\\OpaquePointersLLVMTransformer\\device_code.bc"
+        "launch_device_code"
+      ],
+      
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/windows-msvc-debug/hip_runner/",
+      "environment": [
+       
+        {
+          "name": "AMD_COMGR_CACHE",
+          "value": "0"
+        }
+      ],
+      "console": "integratedTerminal"
     }
   ]
 }

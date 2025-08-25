@@ -8,17 +8,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_HIP_RUNNER "Build HIP runner" ON)
 
-# LLVM Config
-# Validate required variables
 if(NOT DEFINED LLVM_ROOT_DIR)
     message(FATAL_ERROR "LLVM_ROOT_DIR is not set")
 endif()
 message(STATUS "LLVM path: ${LLVM_ROOT_DIR}")
-#list(APPEND CMAKE_PREFIX_PATH "${LLVM_ROOT_DIR}")
 
 
-# Find LLVM 16 modules 
 find_package(LLVM 16 REQUIRED CONFIG
     HINTS ${LLVM_ROOT_DIR}
     PATHS ${LLVM_ROOT_DIR}/lib/cmake/llvm
@@ -31,8 +28,17 @@ if (NOT LLVM_FOUND)
   message(FATAL_ERROR "LLVM 16 not found")  
 endif()
 
-# add project from src
 add_subdirectory(src)
+
+if (BUILD_HIP_RUNNER)
+  set(GPU_TARGETS "gfx1030" CACHE STRING "GPU targets for HIP runner")
+  set(HIP_ROOT_DIR "C:/opt/rocm" CACHE PATH "Path to HIP installation")
+  find_package(HIP REQUIRED)
+  message(STATUS "HIP found: ${HIP_ROOT_DIR}")
+  add_subdirectory(hip_runner)
+else()
+  message(STATUS "Skipping HIP runner as BUILD_HIP_RUNNER is not set")
+endif()
 
 if(BUILD_TESTS)
   add_subdirectory(tests)

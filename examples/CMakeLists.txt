@@ -9,7 +9,7 @@ set_target_properties(${test_target} PROPERTIES
 )
 
 target_link_libraries(${target_example} PRIVATE
-    ToOpaquePtrsTransformer
+    llvmtransformer
 )
 
 set_target_properties(${target_example} PROPERTIES
@@ -18,7 +18,7 @@ set_target_properties(${target_example} PROPERTIES
 )
 
 install(TARGETS ${target_example}
-  EXPORT ToOpaquePtrsTransformerExampleTargets
+  EXPORT LLVMTransformerExampleTargets
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
@@ -27,14 +27,14 @@ install(TARGETS ${target_example}
 
 set(target_transform transoform)
 add_executable(${target_transform} transform.cpp)
-target_link_libraries(${target_transform} PRIVATE ToOpaquePtrsTransformer)
+target_link_libraries(${target_transform} PRIVATE llvmtransformer)
 set_target_properties(${target_transform} PROPERTIES
   VERSION 1.0.0
   SOVERSION 1
 )
 
 install(TARGETS ${target_transform}
-  EXPORT ToOpaquePtrsTransformerExampleTargets
+  EXPORT LLVMTransformerExampleTargets
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
