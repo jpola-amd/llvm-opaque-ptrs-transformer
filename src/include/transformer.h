@@ -68,22 +68,29 @@ namespace llvm_transformer {
         GFX1100 = 1100,
         GFX1101 = 1101,
         GFX1102 = 1102,
+        GFX1150 = 1150,
         GFX1151 = 1151,
         GFX1200 = 1200,
         GFX1201 = 1201,
         GENERIC = 1,
         GFX_INVALID = 0,
     };
+    
+    std::vector<std::string> GetTargetFeaturesFor(AMDGCNTarget target);
 
     struct TransformOptions {
         bool neutralize_target = false;
         bool remove_compiler_info = false;
         std::string target_triple = "";
-        std::string target_features = "";
         AMDGCNTarget amdgcn_target = AMDGCNTarget::GENERIC;
         std::string kernel_function_name = "evalGLSL";
         bool output_bitcode = false;
         bool debug_switch_statements = false;
+        std::vector<std::string> target_features {};
+        // if use_fast_math is enabled, adds this set of function attributes
+        // otherwise gets the default set
+        std::vector<std::pair<std::string, std::string>> fast_math_features {};
+        bool use_fast_math = true;
     };
    
     /**
