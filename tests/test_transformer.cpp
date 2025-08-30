@@ -13,7 +13,7 @@ using namespace llvm_transformer;
 
 std::string load_test_resource(const std::string& filename) {
     // Load the test resource from the resources directory
-    std::cerr << "PWD: " << std::filesystem::current_path() << std::endl;
+    //std::cerr << "PWD: " << std::filesystem::current_path() << std::endl;
     std::string file_path = "resources/" + filename;
     std::ifstream file(file_path);
 
@@ -45,6 +45,33 @@ void save_result_to_file(const std::filesystem::path& file_path, const Transform
         throw std::runtime_error("Unsupported content format for saving");
     }
     
+}
+
+std::string run_process(const std::string& command) {
+    std::string result;
+    FILE* pipe = _popen(command.c_str(), "r");
+    if (!pipe) return "ERROR";
+    char buffer[128];
+    while (fgets(buffer, sizeof(buffer), pipe)) {
+        result += buffer;
+    }
+    _pclose(pipe);
+    return result;
+}
+
+// try to compile llvm bitcode 
+bool compile_llvm_bitcode(const std::string& bitcode_path, const std::string output, const std::string cpu) {
+    std::string command = "llc -filetype=obj " + bitcode_path + " -o " + output + " -march=amdgcn -mcpu=" + cpu + " 2>&1";
+
+    // Simple implementation of run_process using std::system (does not capture output)
+    // For real output/error capture, use platform-specific APIs or libraries like popen, Boost.Process, etc.
+    std::string output_str = run_process(command);
+    if (output_str.empty()) {
+        return true;
+    }
+    std::cerr << "Compilation failed: " << output_str << std::endl;
+
+    return false;
 }
 
 class OpaquePointerTransformerTest : public ::testing::Test {
@@ -506,5 +533,60 @@ TEST_F(OpaquePointerTransformerTest, TransformRealFile_AddDebugSwitchStatementsB
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
 
     save_result_to_file ("bitcode.debug_switch.gfx1030.bc", result.getValue());
+}
 
+TEST_F(OpaquePointerTransformerTest, TransformRealFile_FastMathAttributes) {
+
+    std::string input_ir = load_test_resource("before_replace.ptx.ll");
+    
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+    
+    // Set options to output bitcode
+    TransformOptions options;
+    options.output_bitcode = true; // Enable bitcode output
+    options.amdgcn_target = AMDGCNTarget::GFX1030;
+    options.remove_compiler_info = true;
+    options.use_fast_math = true;
+    options.fast_math_features = {
+        {"less-precise-fpmad", "true"},
+        {"no-infs-fp-math", "true"},
+        {"no-nans-fp-math", "true"},
+        {"no-signed-zeros-fp-math", "true"},
+        {"no-trapping-math", "true"},
+        {"unsafe-fp-math", "true"},
+        {"approx-funcs", "true"}
+    };
+    
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+    
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+
+    save_result_to_file ("bitcode.fast_math.gfx1030.bc", result.getValue());
+    compile_llvm_bitcode("bitcode.fast_math.gfx1030.bc", "fast_math.o", "gfx1030");
+}
+
+TEST_F(OpaquePointerTransformerTest, TransformAddressSpace)
+{
+    std::string input_ir = load_test_resource("evalGLSL.raw.amdgcn.ll");
+
+    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+
+    // Set options to output bitcode
+    TransformOptions options;
+    options.output_bitcode = false; // Enable bitcode output
+    options.amdgcn_target = AMDGCNTarget::GFX1100;
+    options.remove_compiler_info = true;
+    options.use_fast_math = true;
+
+    auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+
+    save_result_to_file("address_space_replaced.gfx1100.ll", result.getValue());
+
+    options.output_bitcode = true; // Enable bitcode output
+    result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+    save_result_to_file("address_space_replaced.gfx1100.bc", result.getValue());
+    EXPECT_TRUE(compile_llvm_bitcode("address_space_replaced.gfx1100.bc", "address_space_replaced.o", "gfx1100")) << "Failed to compile address_space_replaced.gfx1100.bc";
 }

@@ -27,6 +27,21 @@
       "environment": [],
       "console": "integratedTerminal",
     },
+
+    {
+      "name": "Debug test_transformer addrspace",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/windows-msvc-debug/tests/Debug/test_transformer.exe",
+      "args": [
+        "--gtest_filter=*TransformAddressSpace"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/windows-msvc-debug/tests/",
+      "environment": [],
+      "console": "integratedTerminal",
+    },
+
     {
       "name": "test_transformer (Release)",
       "type": "cppvsdbg",
