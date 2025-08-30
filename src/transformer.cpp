@@ -631,6 +631,18 @@ namespace llvm_transformer
         return features;
     }
 
+    /*
+    Transforms the module from:
+        %33 = alloca %struct.StateCore.479, align 8
+        %38 = bitcast %struct.StateCore.479* %33 to i8* 
+        call void @llvm.lifetime.start.p0i8(i64 264, i8* nonnull %38)
+    
+    To:
+
+    %33.as5 = alloca %struct.StateCore.479, addrspace(5), align 8 // adding target addrspace
+    //The bitcast becomes unnecessary with opaque pointers, and lifetime intrinsics need to use the correct address space variant.
+    call void @llvm.lifetime.start.p5i8(i64 264, ptr addrspace(5) %33.as5)
+    */
     static void replaceBitcastUses(llvm::BitCastInst *BC, llvm::AllocaInst *newAlloca,
                                    std::vector<llvm::Instruction *> &instsToRemove,
                                    llvm::Module *module)
@@ -668,6 +680,21 @@ namespace llvm_transformer
             U->replaceUsesOfWith(BC, newAlloca);
         }
     }
+
+    // Replace the old alloca with default addrspace to new one 
+    /*
+        Original: ptr (address space 0)
+        %old = alloca %struct.Type, align 8
+
+        New: ptr addrspace(5) 
+        %new = alloca %struct.Type, addrspace(5), align 8
+
+        Takes care of various cases:
+            BitCast instructions - especially those used for lifetime intrinsics
+            GetElementPtr (GEP) instructions - for accessing struct members or array elements
+            Store instructions - writing to the allocated memory
+            Load instructions - reading from the allocated memory
+    */
     static void replaceAllocaUses(llvm::AllocaInst *oldAlloca, llvm::AllocaInst *newAlloca,
                                   std::vector<llvm::Instruction *> &instsToRemove,
                                   llvm::Module *module)
@@ -676,6 +703,7 @@ namespace llvm_transformer
 
         for (llvm::User *U : users)
         {
+            // Am I a BitCast?
             if (auto *BC = llvm::dyn_cast<llvm::BitCastInst>(U))
             {
                 // Handle bitcast to i8* (common for lifetime intrinsics)
@@ -713,7 +741,8 @@ namespace llvm_transformer
                 BC->replaceAllUsesWith(newBC);
                 instsToRemove.push_back(BC);
             }
-            
+
+            // Am I GEP instruction?
             else if (auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(U))
             {
                 // Create new GEP with correct address space
@@ -726,14 +755,15 @@ namespace llvm_transformer
                 llvm::Value *newGEP = builder.CreateGEP(
                     sourceElementType, newAlloca, indices, GEP->getName());
                 
-                    // If the result types don't match, we need to cast
+                // If the result types don't match, we need to cast
                 if (newGEP->getType() != GEP->getType()) {
                     // Cast from ptr addrspace(5) to ptr (generic address space)
-                    newGEP = builder.CreateAddrSpaceCast(newGEP, GEP->getType(), GEP->getName() + ".cast");
+                    newGEP = builder.CreateAddrSpaceCast(newGEP, GEP->getType()/*, GEP->getName() + ".cast"*/);
                 }
                 GEP->replaceAllUsesWith(newGEP);
                 instsToRemove.push_back(GEP);
             }
+
             else if (auto *store = llvm::dyn_cast<llvm::StoreInst>(U))
             {
                 // Update store instruction
@@ -757,6 +787,18 @@ namespace llvm_transformer
         }
     }
 
+/*
+fixAllocaAddressSpaces()
+    ├── Finds: %old = alloca %struct.Type, align 8
+    ├── Creates: %new = alloca %struct.Type, addrspace(5), align 8
+    └── Calls: replaceAllocaUses(old, new, ...)
+            ├── Handles GEP: Creates new GEP + address space cast
+            ├── Handles Store/Load: Creates new instructions
+            └── Handles BitCast: Calls replaceBitcastUses(...)
+                    └── Handles lifetime intrinsics: 
+                        - Removes redundant bitcast
+                        - Creates new intrinsic with correct address space
+*/
     static bool fixAllocaAddressSpaces(llvm::Module *module)
     {
         if (!module)
@@ -764,6 +806,7 @@ namespace llvm_transformer
 
         bool changed = false;
 
+        // Scan all functions and search for allocas
         for (llvm::Function &F : *module)
         {
             if (F.isDeclaration())
@@ -777,8 +820,10 @@ namespace llvm_transformer
             {
                 for (llvm::Instruction &I : BB)
                 {
+                    // if the instruction is an alloca
                     if (auto *AI = llvm::dyn_cast<llvm::AllocaInst>(&I))
                     {
+                        // check if the alloca is in the generic address space
                         if (AI->getAddressSpace() == 0)
                         {
                             allocasToFix.push_back(AI);
@@ -795,8 +840,11 @@ namespace llvm_transformer
                 llvm::Type *allocatedType = oldAlloca->getAllocatedType();
                 llvm::Value *arraySize = oldAlloca->getArraySize();
 
+                // For the Debug and inspection the new alloca instruction 
+                // will have the .as5 suffix if last arg will be uncommented
                 llvm::AllocaInst *newAlloca = builder.CreateAlloca(
-                    allocatedType, 5, arraySize, oldAlloca->getName() + ".as5");
+                    allocatedType, 5, arraySize /*, oldAlloca->get->getName() + ".as5"*/); 
+                // make sure that we preserve the original alignment
                 newAlloca->setAlignment(oldAlloca->getAlign());
 
                 // Replace all uses and handle bitcasts

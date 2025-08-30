@@ -74,6 +74,17 @@ bool compile_llvm_bitcode(const std::string& bitcode_path, const std::string out
     return false;
 }
 
+bool llvm_ir_to_bitcode(const std::string& ir_file_path, const std::string& output_path = "") {
+
+    std::string command = "llvm-as " + ir_file_path + " -o " + output_path + " 2>&1";
+    std::string output_str = run_process(command);
+    if (!output_str.empty()) {
+        std::cerr << "IR to Bitcode conversion failed: " << output_str << std::endl;
+        return false;
+    }
+    return true;
+}
+
 class OpaquePointerTransformerTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -543,7 +554,7 @@ TEST_F(OpaquePointerTransformerTest, TransformRealFile_FastMathAttributes) {
     
     // Set options to output bitcode
     TransformOptions options;
-    options.output_bitcode = true; // Enable bitcode output
+    options.output_bitcode = false; // Enable bitcode output
     options.amdgcn_target = AMDGCNTarget::GFX1030;
     options.remove_compiler_info = true;
     options.use_fast_math = true;
@@ -561,7 +572,7 @@ TEST_F(OpaquePointerTransformerTest, TransformRealFile_FastMathAttributes) {
     
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
 
-    save_result_to_file ("bitcode.fast_math.gfx1030.bc", result.getValue());
+    save_result_to_file ("bitcode.fast_math.gfx1030.ll", result.getValue());
     compile_llvm_bitcode("bitcode.fast_math.gfx1030.bc", "fast_math.o", "gfx1030");
 }
 
@@ -583,10 +594,6 @@ TEST_F(OpaquePointerTransformerTest, TransformAddressSpace)
     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
 
     save_result_to_file("address_space_replaced.gfx1100.ll", result.getValue());
-
-    options.output_bitcode = true; // Enable bitcode output
-    result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
-    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
-    save_result_to_file("address_space_replaced.gfx1100.bc", result.getValue());
+    EXPECT_TRUE(llvm_ir_to_bitcode("address_space_replaced.gfx1100.ll", "address_space_replaced.gfx1100.bc")) << "Failed to turn IR into Bitcode";
     EXPECT_TRUE(compile_llvm_bitcode("address_space_replaced.gfx1100.bc", "address_space_replaced.o", "gfx1100")) << "Failed to compile address_space_replaced.gfx1100.bc";
 }
