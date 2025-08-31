@@ -634,9 +634,9 @@ namespace llvm_transformer
     /*
     Transforms the module from:
         %33 = alloca %struct.StateCore.479, align 8
-        %38 = bitcast %struct.StateCore.479* %33 to i8* 
+        %38 = bitcast %struct.StateCore.479* %33 to i8*
         call void @llvm.lifetime.start.p0i8(i64 264, i8* nonnull %38)
-    
+
     To:
 
     %33.as5 = alloca %struct.StateCore.479, addrspace(5), align 8 // adding target addrspace
@@ -653,21 +653,19 @@ namespace llvm_transformer
         {
             if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(U))
             {
-                // Handle lifetime intrinsics
+                // Handle lifetime intrinsics - they should use addrspace(5) directly
                 if (II->getIntrinsicID() == llvm::Intrinsic::lifetime_start ||
                     II->getIntrinsicID() == llvm::Intrinsic::lifetime_end)
                 {
-
                     llvm::IRBuilder<> builder(II);
                     llvm::Intrinsic::ID ID = II->getIntrinsicID();
 
-                    // Get the appropriate intrinsic for addrspace(5)
-                    // With opaque pointers, just use ptr addrspace(5)
+                    // Get the addrspace(5) variant of the lifetime intrinsic
                     llvm::Type *ptrTy = llvm::PointerType::get(module->getContext(), 5);
                     llvm::Function *newIntrinsic = llvm::Intrinsic::getDeclaration(
                         module, ID, {ptrTy});
 
-                    // Create new intrinsic call
+                    // Use the addrspace(5) alloca directly (no cast needed)
                     llvm::Value *args[] = {II->getArgOperand(0), newAlloca};
                     builder.CreateCall(newIntrinsic, args);
 
@@ -676,17 +674,29 @@ namespace llvm_transformer
                 }
             }
 
-            // For other uses, replace with newAlloca directly
-            U->replaceUsesOfWith(BC, newAlloca);
+            // For other uses, create appropriate casts
+            if (auto *CI = llvm::dyn_cast<llvm::CallInst>(U))
+            {
+                // Function calls need generic address space
+                llvm::IRBuilder<> builder(CI);
+                llvm::Value *castArg = builder.CreateAddrSpaceCast(
+                    newAlloca, llvm::PointerType::get(builder.getContext(), 0));
+                U->replaceUsesOfWith(BC, castArg);
+            }
+            else
+            {
+                // Other uses might need the addrspace(5) version
+                U->replaceUsesOfWith(BC, newAlloca);
+            }
         }
     }
 
-    // Replace the old alloca with default addrspace to new one 
+    // Replace the old alloca with default addrspace to new one
     /*
         Original: ptr (address space 0)
         %old = alloca %struct.Type, align 8
 
-        New: ptr addrspace(5) 
+        New: ptr addrspace(5)
         %new = alloca %struct.Type, addrspace(5), align 8
 
         Takes care of various cases:
@@ -695,6 +705,7 @@ namespace llvm_transformer
             Store instructions - writing to the allocated memory
             Load instructions - reading from the allocated memory
     */
+
     static void replaceAllocaUses(llvm::AllocaInst *oldAlloca, llvm::AllocaInst *newAlloca,
                                   std::vector<llvm::Instruction *> &instsToRemove,
                                   llvm::Module *module)
@@ -706,128 +717,149 @@ namespace llvm_transformer
             // Am I a BitCast?
             if (auto *BC = llvm::dyn_cast<llvm::BitCastInst>(U))
             {
-                // Handle bitcast to i8* (common for lifetime intrinsics)
-                if (BC->getType()->isPointerTy())
+                llvm::Type *destTy = BC->getDestTy();
+                if (destTy->isPointerTy())
                 {
-                    // With opaque pointers, we can't check the element type directly
-                    // Instead, check if this bitcast is used by lifetime intrinsics
-                    bool isForLifetimeIntrinsic = false;
-                    for (llvm::User *BCUser : BC->users())
+                    unsigned destAS = destTy->getPointerAddressSpace();
+                    unsigned srcAS = newAlloca->getType()->getPointerAddressSpace();
+                    llvm::IRBuilder<> builder(BC);
+                    llvm::Value *newVal;
+                    if (destAS != srcAS)
                     {
-                        if (auto *II = llvm::dyn_cast<llvm::IntrinsicInst>(BCUser))
-                        {
-                            if (II->getIntrinsicID() == llvm::Intrinsic::lifetime_start ||
-                                II->getIntrinsicID() == llvm::Intrinsic::lifetime_end)
-                            {
-                                isForLifetimeIntrinsic = true;
-                                break;
-                            }
-                        }
+                        // Use addrspacecast
+                        newVal = builder.CreateAddrSpaceCast(newAlloca, destTy, BC->getName());
                     }
-
-                    if (isForLifetimeIntrinsic)
+                    else
                     {
-                        // This is likely for lifetime intrinsics - replace directly
-                        replaceBitcastUses(BC, newAlloca, instsToRemove, module);
-                        instsToRemove.push_back(BC);
-                        continue;
+                        // Use bitcast if address spaces match
+                        newVal = builder.CreateBitCast(newAlloca, destTy, BC->getName());
                     }
+                    BC->replaceAllUsesWith(newVal);
+                    instsToRemove.push_back(BC);
+                    continue;
                 }
-
-                // For other bitcasts, create new bitcast with correct address space
-                llvm::IRBuilder<> builder(BC);
-                llvm::Type *destTy = llvm::PointerType::get(builder.getContext(), 5); // ptr addrspace(5)
-                llvm::Value *newBC = builder.CreateBitCast(newAlloca, destTy, BC->getName());
-                BC->replaceAllUsesWith(newBC);
-                instsToRemove.push_back(BC);
             }
 
-            // Am I GEP instruction?
+            // Handle GEP instructions
             else if (auto *GEP = llvm::dyn_cast<llvm::GetElementPtrInst>(U))
             {
-                // Create new GEP with correct address space
                 llvm::IRBuilder<> builder(GEP);
                 llvm::SmallVector<llvm::Value *, 4> indices(GEP->indices());
-                
-                // For opaque pointers, we need to use the allocated type from the alloca
                 llvm::Type *sourceElementType = newAlloca->getAllocatedType();
-                
-                llvm::Value *newGEP = builder.CreateGEP(
-                    sourceElementType, newAlloca, indices, GEP->getName());
-                
-                // If the result types don't match, we need to cast
-                if (newGEP->getType() != GEP->getType()) {
-                    // Cast from ptr addrspace(5) to ptr (generic address space)
-                    newGEP = builder.CreateAddrSpaceCast(newGEP, GEP->getType()/*, GEP->getName() + ".cast"*/);
+                llvm::Value *newGEP = builder.CreateGEP(sourceElementType, newAlloca, indices, GEP->getName());
+                if (GEP->getType()->getPointerAddressSpace() == 0)
+                {
+                    newGEP = builder.CreateAddrSpaceCast(newGEP, GEP->getType());
                 }
                 GEP->replaceAllUsesWith(newGEP);
                 instsToRemove.push_back(GEP);
             }
+
+            // Handle Store instructions
             else if (auto *store = llvm::dyn_cast<llvm::StoreInst>(U))
             {
-                // Update store instruction
                 llvm::IRBuilder<> builder(store);
                 builder.CreateStore(store->getValueOperand(), newAlloca, store->isVolatile());
                 instsToRemove.push_back(store);
             }
+
+            // Handle Load instructions
             else if (auto *load = llvm::dyn_cast<llvm::LoadInst>(U))
             {
-                // Update load instruction
                 llvm::IRBuilder<> builder(load);
                 llvm::Value *newLoad = builder.CreateLoad(load->getType(), newAlloca, load->getName());
                 load->replaceAllUsesWith(newLoad);
                 instsToRemove.push_back(load);
             }
-            else if (auto *CI = llvm::dyn_cast<llvm::CallInst>(U)) 
-            {
-                // For calls, cast addrspace(5) arguments to generic ptr
-                std::vector<llvm::Value*> newArgs;
-                bool needsUpdate = false;
 
-                for (unsigned i = 0; i < CI->arg_size(); ++i) {
+            // Handle function calls - cast to generic address space for external functions
+            else if (auto *CI = llvm::dyn_cast<llvm::CallInst>(U))
+            {
+                std::vector<llvm::Value *> newArgs;
+                bool needsUpdate = false;
+                for (unsigned i = 0; i < CI->arg_size(); ++i)
+                {
                     llvm::Value *arg = CI->getArgOperand(i);
-                    if (arg == oldAlloca) {
-                        // Cast our addrspace(5) alloca to generic ptr for the call
-                        llvm::IRBuilder<> builder(CI);
-                        llvm::Value *castArg = builder.CreateAddrSpaceCast(
-                            newAlloca, llvm::PointerType::get(builder.getContext(), 0));
-                        newArgs.push_back(castArg);
-                        needsUpdate = true;
-                    } else {
+                    if (arg == oldAlloca)
+                    {
+                        llvm::Type *expectedTy = CI->getFunctionType()->getParamType(i);
+                        if (expectedTy->isPointerTy() &&
+                            expectedTy->getPointerAddressSpace() == 0 &&
+                            newAlloca->getType()->getPointerAddressSpace() == 5)
+                        {
+                            llvm::IRBuilder<> builder(CI);
+                            llvm::Value *castArg = builder.CreateAddrSpaceCast(newAlloca, expectedTy);
+                            newArgs.push_back(castArg);
+                            needsUpdate = true;
+                        }
+                        else
+                        {
+                            newArgs.push_back(newAlloca);
+                        }
+                    }
+                    else
+                    {
                         newArgs.push_back(arg);
                     }
                 }
-                
-                if (needsUpdate) {
+                if (needsUpdate)
+                {
                     llvm::IRBuilder<> builder(CI);
                     llvm::Value *newCall = builder.CreateCall(CI->getCalledFunction(), newArgs, CI->getName());
-                    if (!CI->getType()->isVoidTy()) {
+                    if (!CI->getType()->isVoidTy())
+                    {
                         CI->replaceAllUsesWith(newCall);
                     }
                     instsToRemove.push_back(CI);
                 }
             }
+
+            // Handle direct uses (like taking address of alloca)
             else
             {
-                // For other uses, try direct replacement
-                U->replaceUsesOfWith(oldAlloca, newAlloca);
+                llvm::Type *expectedTy = nullptr;
+                if (auto *userInst = llvm::dyn_cast<llvm::Instruction>(U))
+                {
+                    // Try to infer expected type from operands
+                    for (unsigned i = 0; i < userInst->getNumOperands(); ++i)
+                    {
+                        if (userInst->getOperand(i) == oldAlloca)
+                        {
+                            expectedTy = userInst->getOperand(i)->getType();
+                            break;
+                        }
+                    }
+                }
+                if (expectedTy && expectedTy->isPointerTy() &&
+                    expectedTy->getPointerAddressSpace() == newAlloca->getType()->getPointerAddressSpace())
+                {
+                    // No cast needed, just replace
+                    U->replaceUsesOfWith(oldAlloca, newAlloca);
+                }
+                else
+                {
+                    // Cast to generic address space for compatibility
+                    llvm::IRBuilder<> builder(oldAlloca->getNextNode());
+                    llvm::Value *castAlloca = builder.CreateAddrSpaceCast(
+                        newAlloca, llvm::PointerType::get(module->getContext(), 0));
+                    U->replaceUsesOfWith(oldAlloca, castAlloca);
+                }
             }
         }
     }
-
-/*
-fixAllocaAddressSpaces()
-    ├── Finds: %old = alloca %struct.Type, align 8
-    ├── Creates: %new = alloca %struct.Type, addrspace(5), align 8
-    └── Calls: replaceAllocaUses(old, new, ...)
-            ├── Handles GEP: Creates new GEP + address space cast
-            ├── Handles Store/Load: Creates new instructions
-            └── Handles BitCast: Calls replaceBitcastUses(...)
-                    └── Handles lifetime intrinsics: 
-                        - Removes redundant bitcast
-                        - Creates new intrinsic with correct address space
-            └── Handles the function calls and removes the explicit addrspace casts
-*/
+    /*
+    fixAllocaAddressSpaces()
+        ├── Finds: %old = alloca %struct.Type, align 8
+        ├── Creates: %new = alloca %struct.Type, addrspace(5), align 8
+        └── Calls: replaceAllocaUses(old, new, ...)
+                ├── Handles GEP: Creates new GEP + address space cast
+                ├── Handles Store/Load: Creates new instructions
+                └── Handles BitCast: Calls replaceBitcastUses(...)
+                        └── Handles lifetime intrinsics:
+                            - Removes redundant bitcast
+                            - Creates new intrinsic with correct address space
+                └── Handles the function calls and removes the explicit addrspace casts
+    */
     static bool fixAllocaAddressSpaces(llvm::Module *module)
     {
         if (!module)
@@ -869,10 +901,10 @@ fixAllocaAddressSpaces()
                 llvm::Type *allocatedType = oldAlloca->getAllocatedType();
                 llvm::Value *arraySize = oldAlloca->getArraySize();
 
-                // For the Debug and inspection the new alloca instruction 
+                // For the Debug and inspection the new alloca instruction
                 // will have the .as5 suffix if last arg will be uncommented
                 llvm::AllocaInst *newAlloca = builder.CreateAlloca(
-                    allocatedType, 5, arraySize /*, oldAlloca->get->getName() + ".as5"*/); 
+                    allocatedType, 5, arraySize /*, oldAlloca->get->getName() + ".as5"*/);
                 // make sure that we preserve the original alignment
                 newAlloca->setAlignment(oldAlloca->getAlign());
 
