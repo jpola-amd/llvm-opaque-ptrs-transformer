@@ -91,6 +91,7 @@ namespace llvm_transformer {
         // otherwise gets the default set
         std::vector<std::pair<std::string, std::string>> fast_math_features {};
         bool use_fast_math = true;
+        bool debug_mode = false;
     };
    
     /**

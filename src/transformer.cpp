@@ -763,7 +763,6 @@ namespace llvm_transformer
                 GEP->replaceAllUsesWith(newGEP);
                 instsToRemove.push_back(GEP);
             }
-
             else if (auto *store = llvm::dyn_cast<llvm::StoreInst>(U))
             {
                 // Update store instruction
@@ -778,6 +777,35 @@ namespace llvm_transformer
                 llvm::Value *newLoad = builder.CreateLoad(load->getType(), newAlloca, load->getName());
                 load->replaceAllUsesWith(newLoad);
                 instsToRemove.push_back(load);
+            }
+            else if (auto *CI = llvm::dyn_cast<llvm::CallInst>(U)) 
+            {
+                // For calls, cast addrspace(5) arguments to generic ptr
+                std::vector<llvm::Value*> newArgs;
+                bool needsUpdate = false;
+
+                for (unsigned i = 0; i < CI->arg_size(); ++i) {
+                    llvm::Value *arg = CI->getArgOperand(i);
+                    if (arg == oldAlloca) {
+                        // Cast our addrspace(5) alloca to generic ptr for the call
+                        llvm::IRBuilder<> builder(CI);
+                        llvm::Value *castArg = builder.CreateAddrSpaceCast(
+                            newAlloca, llvm::PointerType::get(builder.getContext(), 0));
+                        newArgs.push_back(castArg);
+                        needsUpdate = true;
+                    } else {
+                        newArgs.push_back(arg);
+                    }
+                }
+                
+                if (needsUpdate) {
+                    llvm::IRBuilder<> builder(CI);
+                    llvm::Value *newCall = builder.CreateCall(CI->getCalledFunction(), newArgs, CI->getName());
+                    if (!CI->getType()->isVoidTy()) {
+                        CI->replaceAllUsesWith(newCall);
+                    }
+                    instsToRemove.push_back(CI);
+                }
             }
             else
             {
@@ -798,6 +826,7 @@ fixAllocaAddressSpaces()
                     └── Handles lifetime intrinsics: 
                         - Removes redundant bitcast
                         - Creates new intrinsic with correct address space
+            └── Handles the function calls and removes the explicit addrspace casts
 */
     static bool fixAllocaAddressSpaces(llvm::Module *module)
     {
@@ -922,7 +951,7 @@ fixAllocaAddressSpaces()
 
         TransformResult result;
 
-        if (options.output_bitcode)
+        if (options.output_bitcode && !options.debug_mode)
         {
             // If bitcode output is requested, write to a binary format
             llvm::SmallVector<char> bitcode_data;
