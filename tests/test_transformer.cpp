@@ -552,35 +552,35 @@ TEST_F(OpaquePointerTransformerTest, TransformRealFile_AddDebugSwitchStatementsB
     save_result_to_file ("bitcode.debug_switch.gfx1030.bc", result.getValue());
 }
 
-TEST_F(OpaquePointerTransformerTest, TransformRealFile_FastMathAttributes) {
+// TEST_F(OpaquePointerTransformerTest, TransformRealFile_FastMathAttributes) {
 
-    std::string input_ir = load_test_resource("before_replace.ptx.ll");
+//     std::string input_ir = load_test_resource("before_replace.ptx.ll");
     
-    ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
+//     ASSERT_FALSE(input_ir.empty()) << "File content should not be empty";
     
-    // Set options to output bitcode
-    TransformOptions options;
-    options.output_bitcode = true; // Enable bitcode output
-    options.amdgcn_target = AMDGCNTarget::GFX1030;
-    options.remove_compiler_info = true;
-    options.use_fast_math = true;
-    options.fast_math_features = {
-        {"less-precise-fpmad", "true"},
-        {"no-infs-fp-math", "true"},
-        {"no-nans-fp-math", "true"},
-        {"no-signed-zeros-fp-math", "true"},
-        {"no-trapping-math", "true"},
-        {"unsafe-fp-math", "true"},
-        {"approx-funcs", "true"}
-    };
+//     // Set options to output bitcode
+//     TransformOptions options;
+//     options.output_bitcode = true; // Enable bitcode output
+//     options.amdgcn_target = AMDGCNTarget::GFX1030;
+//     options.remove_compiler_info = true;
+//     options.use_fast_math = true;
+//     options.fast_math_features = {
+//         {"less-precise-fpmad", "true"},
+//         {"no-infs-fp-math", "true"},
+//         {"no-nans-fp-math", "true"},
+//         {"no-signed-zeros-fp-math", "true"},
+//         {"no-trapping-math", "true"},
+//         {"unsafe-fp-math", "true"},
+//         {"approx-funcs", "true"}
+//     };
     
-    auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
+//     auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);
     
-    EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
+//     EXPECT_TRUE(result.hasValue()) << "Transformation should succeed for real file with bitcode output";
 
-    save_result_to_file ("bitcode.fast_math.gfx1030.bc", result.getValue());
-    compile_llvm_bitcode("bitcode.fast_math.gfx1030.bc", "fast_math.o", "gfx1030");
-}
+//     save_result_to_file ("bitcode.fast_math.gfx1030.bc", result.getValue());
+//     compile_llvm_bitcode("bitcode.fast_math.gfx1030.bc", "fast_math.o", "gfx1030");
+// }
 
 TEST_F(OpaquePointerTransformerTest, TransformAddressSpace)
 {
@@ -593,7 +593,6 @@ TEST_F(OpaquePointerTransformerTest, TransformAddressSpace)
     options.output_bitcode = true; // Enable bitcode output
     options.amdgcn_target = AMDGCNTarget::GFX1100;
     options.remove_compiler_info = true;
-    options.use_fast_math = true;
     options.debug_mode = false;
 
     auto result = transform_llvm_ir_to_opaque_pointers(input_ir, options);

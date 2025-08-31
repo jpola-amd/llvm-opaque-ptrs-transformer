@@ -29,27 +29,18 @@ The input is a string view of the llvm-ir file, and the output is a new string t
 namespace llvm_transformer
 {
 
-    inline std::string getAMDGCNCPUTarget(AMDGCNTarget target)
-    {
-        switch (target)
-        {
-        case AMDGCNTarget::GFX1030:
-            return "gfx1030";
-        case AMDGCNTarget::GFX1100:
-            return "gfx1100";
-        case AMDGCNTarget::GFX1101:
-            return "gfx1101";
-        case AMDGCNTarget::GFX1102:
-            return "gfx1102";
-        case AMDGCNTarget::GFX1151:
-            return "gfx1151";
-        case AMDGCNTarget::GFX1200:
-            return "gfx1200";
-        case AMDGCNTarget::GFX1201:
-            return "gfx1201";
-        case AMDGCNTarget::GENERIC:
-        default:
-            return "gfx1030"; // Default to a common target
+    inline std::string getAMDGCNTargetFeatures(AMDGCNTarget target) {
+        switch (target) {
+            case AMDGCNTarget::GFX1030: return "+gfx1030";
+            case AMDGCNTarget::GFX1100: return "+gfx1100";
+            case AMDGCNTarget::GFX1101: return "+gfx1101";
+            case AMDGCNTarget::GFX1102: return "+gfx1102";
+            case AMDGCNTarget::GFX1151: return "+gfx1151";
+            case AMDGCNTarget::GFX1200: return "+gfx1200";
+            case AMDGCNTarget::GFX1201: return "+gfx1201";
+            case AMDGCNTarget::GENERIC:
+            default:
+                return "+gfx1030"; // Default to a common target
         }
     }
 
@@ -102,20 +93,6 @@ namespace llvm_transformer
                               llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), wchar_size));
     }
 
-    using SingleAttributeValue = std::string;
-    using AttributeWithValue = std::pair<std::string, std::string>;
-
-    static std::vector<AttributeWithValue> GetDefaultFastMathFeatures()
-    {
-        return {
-            {"approx-func-fp-math", "true"},
-            {"no-infs-fp-math", "true"},
-            {"no-nans-fp-math", "true"},
-            {"no-signed-zeros-fp-math", "true"},
-            {"no-trapping-math", "true"},
-            {"unsafe-fp-math", "true"}};
-    }
-
     static void cleanModuleForAMDGCN(llvm::Module *module, const TransformOptions &options)
     {
         if (!module)
@@ -145,47 +122,43 @@ namespace llvm_transformer
         module->setDataLayout(getAMDGCNDataLayout());
 
         // 3. Clean and update function attributes
-        for (auto &function : *module)
-        {
-            if (function.isDeclaration())
-                continue;
-
+        for (auto& function : *module) {
+            if (function.isDeclaration()) continue;
+            
+            // Remove PTX-specific attributes
+            function.removeFnAttr("target-features");
+            
+            // TEST This
+            function.removeFnAttr("disable-tail-calls");
+            function.removeFnAttr("frame-pointer");
+            function.removeFnAttr("less-precise-fpmad");
+            function.removeFnAttr("no-infs-fp-math");
+            function.removeFnAttr("no-jump-tables");
+            function.removeFnAttr("no-nans-fp-math");
+            function.removeFnAttr("no-signed-zeros-fp-math");
+            function.removeFnAttr("unsafe-fp-math");
+            function.removeFnAttr("use-soft-float");
+            function.removeFnAttr("no-trapping-math");
+            function.removeFnAttr("stack-protector-buffer-size");
+            
+            // Add AMDGCN target features
+            std::string target_features = options.target_features;
+            if (target_features.empty()) {
+                target_features = getAMDGCNTargetFeatures(options.amdgcn_target);
+            }
+            function.addFnAttr("target-features", target_features);
+            
             // Convert main kernel function to amdgpu_kernel
             if (function.getName() == options.kernel_function_name)
             {
                 // Change calling convention to AMDGPU kernel
                 // function.setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
-                // remove all function attributes
-                function.setAttributes(llvm::AttributeList());
-
-                function.addFnAttr(llvm::Attribute::Convergent);
-                function.addFnAttr(llvm::Attribute::MustProgress);
-                function.addFnAttr(llvm::Attribute::NoReturn);
-                function.addFnAttr(llvm::Attribute::NoUnwind);
-
-                for (const auto &amdgcnAttr : GetTargetFeaturesFor(options.amdgcn_target))
-                {
-                    function.addFnAttr("target-features", amdgcnAttr);
-                }
-
-                if (options.use_fast_math)
-                {
-                    if (options.fast_math_features.empty())
-                    {
-                        for (const auto &[key, value] : GetDefaultFastMathFeatures())
-                        {
-                            function.addFnAttr(key, value);
-                        }
-                    }
-                    for (const auto &[key, value] : options.fast_math_features)
-                    {
-                        function.addFnAttr(key, value);
-                    }
-                }
-
-                // function.addFnAttr("amdgpu-flat-work-group-size", "1,256");
-                function.addFnAttr("target-cpu", getAMDGCNCPUTarget(options.amdgcn_target));
-
+                
+                // Add kernel-specific attributes
+                //function.addFnAttr("amdgpu-flat-work-group-size", "1,256");
+                function.addFnAttr("target-cpu", 
+                    getAMDGCNTargetFeatures(options.amdgcn_target).substr(1)); // Remove '+'
+                
                 // Remove function attributes that don't make sense for kernels
                 function.removeFnAttr(llvm::Attribute::AlwaysInline);
 
@@ -543,94 +516,6 @@ namespace llvm_transformer
                      << kernel_function_name << "'\n";
     }
 
-    std::vector<std::string> GetTargetFeaturesFor(AMDGCNTarget target)
-    {
-        std::vector<std::string> features;
-        switch (target)
-        {
-        case AMDGCNTarget::GFX1030:
-            features = {
-                "+16-bit-insts",
-                "+atomic-fmin-fmax-global-f32",
-                "+atomic-fmin-fmax-global-f64",
-                "+ci-insts",
-                "+dl-insts",
-                "+dot1-insts",
-                "+dot10-insts",
-                "+dot2-insts",
-                "+dot5-insts",
-                "+dot6-insts",
-                "+dot7-insts",
-                "+dpp",
-                "+gfx10-3-insts",
-                "+gfx10-insts",
-                "+gfx8-insts",
-                "+gfx9-insts",
-                "+s-memrealtime",
-                "+s-memtime-inst",
-                "+wavefrontsize32"};
-            break;
-        case AMDGCNTarget::GFX1100:
-        case AMDGCNTarget::GFX1101:
-        case AMDGCNTarget::GFX1102:
-        case AMDGCNTarget::GFX1150:
-        case AMDGCNTarget::GFX1151:
-            features = {
-                "+16-bit-insts",
-                "+atomic-fadd-rtn-insts",
-                "+atomic-fmin-fmax-global-f32",
-                "+ci-insts",
-                "+dl-insts",
-                "+dot10-insts",
-                "+dot12-insts",
-                "+dot5-insts",
-                "+dot7-insts",
-                "+dot8-insts",
-                "+dot9-insts",
-                "+dpp",
-                "+gfx10-3-insts",
-                "+gfx10-insts",
-                "+gfx11-insts",
-                "+gfx8-insts",
-                "+gfx9-insts",
-                "+wavefrontsize32"};
-            break;
-        case AMDGCNTarget::GFX1200:
-        case AMDGCNTarget::GFX1201:
-            features = {
-                "+16-bit-insts",
-                "+atomic-buffer-global-pk-add-f16-insts",
-                "+atomic-buffer-pk-add-bf16-inst",
-                "+atomic-ds-pk-add-16-insts",
-                "+atomic-fadd-rtn-insts",
-                "+atomic-flat-pk-add-16-insts",
-                "+atomic-fmin-fmax-global-f32",
-                "+atomic-global-pk-add-bf16-inst",
-                "+ci-insts",
-                "+dl-insts",
-                "+dot10-insts",
-                "+dot11-insts",
-                "+dot12-insts",
-                "+dot7-insts",
-                "+dot8-insts",
-                "+dot9-insts",
-                "+dpp",
-                "+fp8-conversion-insts",
-                "+gfx10-3-insts",
-                "+gfx10-insts",
-                "+gfx11-insts",
-                "+gfx12-insts",
-                "+gfx8-insts",
-                "+gfx9-insts",
-                "+wavefrontsize32"};
-            break;
-        case AMDGCNTarget::GENERIC:
-        default:
-            break;
-        }
-        return features;
-    }
-
     /*
     Transforms the module from:
         %33 = alloca %struct.StateCore.479, align 8
@@ -931,11 +816,10 @@ namespace llvm_transformer
 
         return changed;
     }
-
-    static inline Result<TransformResult> transform(const std::string_view &input_ir, llvm::LLVMContext &context, ErrorHandler &error_handler, const TransformOptions &options = {})
-    {
-        if (input_ir.empty())
-        {
+    
+    static inline Result<TransformResult> transform(const std::string_view& input_ir, llvm::LLVMContext& context, ErrorHandler& error_handler, const TransformOptions& options = {})
+    {       
+        if (input_ir.empty()) {
             error_handler.addError(ErrorType::PARSING_ERROR, "Input IR is empty");
             return Result<TransformResult>(std::move(error_handler));
         }
@@ -1006,7 +890,7 @@ namespace llvm_transformer
         return Result<TransformResult>(std::move(result));
     }
 
-    Result<TransformResult> transform_llvm_ir_to_opaque_pointers(const std::string_view &input_ir, const TransformOptions &options)
+    Result<TransformResult> transform_llvm_ir_to_opaque_pointers(const std::string_view& input_ir, const TransformOptions& options)
     {
         // Set opaque pointers context
         llvm::LLVMContext context;
