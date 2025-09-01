@@ -591,7 +591,7 @@ TEST_F(OpaquePointerTransformerTest, TransformAddressSpace)
     // Set options to output bitcode
     TransformOptions options;
     options.output_bitcode = true; // Enable bitcode output
-    options.amdgcn_target = AMDGCNTarget::GFX1100;
+    options.amdgcn_target = AMDGCNTarget::GFX1201;
     options.remove_compiler_info = true;
     options.debug_mode = false;
 
@@ -601,34 +601,34 @@ TEST_F(OpaquePointerTransformerTest, TransformAddressSpace)
 
     if (options.output_bitcode) 
     {
-        save_result_to_file("address_space_replaced.gfx1100.bc", result.getValue());
-        // EXPECT_TRUE(llvm_ir_to_bitcode("address_space_replaced.gfx1100.ll", "address_space_replaced.gfx1100.bc")) << "Failed to turn IR into Bitcode";
-        if (!compile_llvm_bitcode("address_space_replaced.gfx1100.bc", "address_space_replaced.bc.o", "gfx1100", false))
+        save_result_to_file("address_space_replaced.gfx1201.bc", result.getValue());
+        // EXPECT_TRUE(llvm_ir_to_bitcode("address_space_replaced.gfx1201.ll", "address_space_replaced.gfx1201.bc")) << "Failed to turn IR into Bitcode";
+        if (!compile_llvm_bitcode("address_space_replaced.gfx1201.bc", "address_space_replaced.bc.o", "gfx1201", false))
         {
-            std::cerr << "Failed to compile address_space_replaced.gfx1100.bc with default llc" << std::endl;
+            std::cerr << "Failed to compile address_space_replaced.gfx1201.bc with default llc" << std::endl;
         }
 
         
         const std::string llc_20_0_0_debug = "D:\\Sandbox\\LLVM-src\\20\\install_debug\\bin\\";
-        if (!compile_llvm_bitcode("address_space_replaced.gfx1100.bc", "address_space_replaced.bc.o", "gfx1100", false, llc_20_0_0_debug))
+        if (!compile_llvm_bitcode("address_space_replaced.gfx1201.bc", "address_space_replaced.bc.o", "gfx1201", false, llc_20_0_0_debug))
         {
-            std::cerr << "Failed to compile address_space_replaced.gfx1100.bc with custom llc dir: " << llc_20_0_0_debug << std::endl;
+            std::cerr << "Failed to compile address_space_replaced.gfx1201.bc with custom llc dir: " << llc_20_0_0_debug << std::endl;
         }
 
         const std::string llc_19_1_7 = "D:\\Sandbox\\LLVM-src\\19.1.7\\dist_debug\\bin\\";
-        if (!compile_llvm_bitcode("address_space_replaced.gfx1100.bc", "address_space_replaced.bc.o", "gfx1100", false, llc_19_1_7))
+        if (!compile_llvm_bitcode("address_space_replaced.gfx1201.bc", "address_space_replaced.bc.o", "gfx1201", false, llc_19_1_7))
         {
-            std::cerr << "Failed to compile address_space_replaced.gfx1100.bc with custom llc dir: " << llc_19_1_7 << std::endl;
+            std::cerr << "Failed to compile address_space_replaced.gfx1201.bc with custom llc dir: " << llc_19_1_7 << std::endl;
         }
         const std::string llc_16_0_6 = "D:\\Sandbox\\OpaquePointersLLVMTransformer\\deps\\llvm-release\\bin";
-        if (!compile_llvm_bitcode("address_space_replaced.gfx1100.bc", "address_space_replaced.bc.o", "gfx1100", false, llc_19_1_7))
+        if (!compile_llvm_bitcode("address_space_replaced.gfx1201.bc", "address_space_replaced.bc.o", "gfx1201", false, llc_19_1_7))
         {
-            std::cerr << "Failed to compile address_space_replaced.gfx1100.bc with custom llc dir: " << llc_16_0_6 << std::endl;
+            std::cerr << "Failed to compile address_space_replaced.gfx1201.bc with custom llc dir: " << llc_16_0_6 << std::endl;
         }
     }
     else 
     {
-        save_result_to_file("address_space_replaced.gfx1100.ll", result.getValue());
-        EXPECT_TRUE(compile_llvm_bitcode("address_space_replaced.gfx1100.ll", "address_space_replaced.ll.o", "gfx1100", true)) << "Failed to compile address_space_replaced.gfx1100.ll";
+        save_result_to_file("address_space_replaced.gfx1201.ll", result.getValue());
+        EXPECT_TRUE(compile_llvm_bitcode("address_space_replaced.gfx1201.ll", "address_space_replaced.ll.o", "gfx1201", true)) << "Failed to compile address_space_replaced.gfx1201.ll";
     }
 }

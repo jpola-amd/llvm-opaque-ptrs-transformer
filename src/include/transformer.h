@@ -68,6 +68,7 @@ namespace llvm_transformer {
         GFX1100 = 1100,
         GFX1101 = 1101,
         GFX1102 = 1102,
+        GFX1150 = 1150,
         GFX1151 = 1151,
         GFX1200 = 1200,
         GFX1201 = 1201,

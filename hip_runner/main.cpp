@@ -186,15 +186,16 @@ int main(int argc, char** argv) {
     save_file("main_program.bc", main_module_data);
     std::vector<BitcodeImage> bitcodes = 
     {
-        {
-            hip_module_data,
-            "external",
-            hiprtcJITInputType::HIPRTC_JIT_INPUT_LLVM_BITCODE
-        },
+       
         {
             main_module_data,
             "main_program",
             hiprtcJITInputType::HIPRTC_JIT_INPUT_LLVM_BUNDLED_BITCODE
+        },
+        {
+            hip_module_data,
+            "external",
+            hiprtcJITInputType::HIPRTC_JIT_INPUT_LLVM_BITCODE
         }
     };
 
@@ -205,7 +206,25 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    save_file("linked.bc", linked_module_data);
+
     hipModule_t hip_module;
+    // Just testing
+    {
+        std::filesystem::path hsacoFile = "D:/Sandbox/OpaquePointersLLVMTransformer/device.hsaco";
+        hipError_t result = hipModuleLoad(&hip_module, hsacoFile.string().c_str());
+        if (result != hipSuccess) {
+            std::cerr << "Error loading HSACO file: " << hipGetErrorString(result) << std::endl;
+            return 1;
+        }
+
+        hipFunction_t hip_function;
+        hip_status = hipModuleGetFunction(&hip_function, hip_module, kernel_name.c_str());
+        if (hip_status != hipSuccess) {
+            std::cerr << "Error getting HIP function: " << hipGetErrorString(hip_status) << std::endl;
+            return 1;
+        }
+    }
     hip_status = hipModuleLoadData(&hip_module, linked_module_data.data());
     if (hip_status != hipSuccess) {
         std::cerr << "Error loading HIP module: " << hipGetErrorString(hip_status) << std::endl;

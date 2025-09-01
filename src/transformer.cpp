@@ -29,18 +29,19 @@ The input is a string view of the llvm-ir file, and the output is a new string t
 namespace llvm_transformer
 {
 
-    inline std::string getAMDGCNTargetFeatures(AMDGCNTarget target) {
+    inline std::string getAMDGCNTargetCPU(AMDGCNTarget target) {
         switch (target) {
-            case AMDGCNTarget::GFX1030: return "+gfx1030";
-            case AMDGCNTarget::GFX1100: return "+gfx1100";
-            case AMDGCNTarget::GFX1101: return "+gfx1101";
-            case AMDGCNTarget::GFX1102: return "+gfx1102";
-            case AMDGCNTarget::GFX1151: return "+gfx1151";
-            case AMDGCNTarget::GFX1200: return "+gfx1200";
-            case AMDGCNTarget::GFX1201: return "+gfx1201";
+            case AMDGCNTarget::GFX1030: return "gfx1030";
+            case AMDGCNTarget::GFX1100: return "gfx1100";
+            case AMDGCNTarget::GFX1101: return "gfx1101";
+            case AMDGCNTarget::GFX1102: return "gfx1102";
+            case AMDGCNTarget::GFX1150: return "gfx1151";
+            case AMDGCNTarget::GFX1151: return "gfx1151";
+            case AMDGCNTarget::GFX1200: return "gfx1200";
+            case AMDGCNTarget::GFX1201: return "gfx1201";
             case AMDGCNTarget::GENERIC:
             default:
-                return "+gfx1030"; // Default to a common target
+                return "gfx1030"; // Default to a common target
         }
     }
 
@@ -127,8 +128,8 @@ namespace llvm_transformer
             
             // Remove PTX-specific attributes
             function.removeFnAttr("target-features");
-            
-            // TEST This
+                       
+            // Remove any fast math we will test it closely later
             function.removeFnAttr("disable-tail-calls");
             function.removeFnAttr("frame-pointer");
             function.removeFnAttr("less-precise-fpmad");
@@ -142,27 +143,16 @@ namespace llvm_transformer
             function.removeFnAttr("stack-protector-buffer-size");
             
             // Add AMDGCN target features
-            std::string target_features = options.target_features;
-            if (target_features.empty()) {
-                target_features = getAMDGCNTargetFeatures(options.amdgcn_target);
+            if (!options.target_features.empty()){
+                std::string target_features = options.target_features;
+                function.addFnAttr("target-features", target_features);
             }
-            function.addFnAttr("target-features", target_features);
             
             // Convert main kernel function to amdgpu_kernel
             if (function.getName() == options.kernel_function_name)
-            {
-                // Change calling convention to AMDGPU kernel
-                // function.setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
-                
-                // Add kernel-specific attributes
-                //function.addFnAttr("amdgpu-flat-work-group-size", "1,256");
-                function.addFnAttr("target-cpu", 
-                    getAMDGCNTargetFeatures(options.amdgcn_target).substr(1)); // Remove '+'
-                
-                // Remove function attributes that don't make sense for kernels
+            {    
+                function.addFnAttr("target-cpu", getAMDGCNTargetCPU(options.amdgcn_target));
                 function.removeFnAttr(llvm::Attribute::AlwaysInline);
-
-                // Ensure proper linkage for kernel
                 if (function.hasInternalLinkage())
                 {
                     function.setLinkage(llvm::GlobalValue::ExternalLinkage);
@@ -170,7 +160,7 @@ namespace llvm_transformer
             }
         }
 
-        // 4. Clean up compiler identification metadata
+        // 4. Clean up compiler identification metadata to avoid any mismatch between bitcode reader and writer
         if (options.remove_compiler_info)
         {
             if (auto llvm_ident = module->getNamedMetadata("llvm.ident"))
@@ -745,12 +735,12 @@ namespace llvm_transformer
                             - Creates new intrinsic with correct address space
                 └── Handles the function calls and removes the explicit addrspace casts
     */
-    static bool fixAllocaAddressSpaces(llvm::Module *module)
+    static bool fixAllocaAddressSpaces(llvm::Module *module, ErrorHandler& error_handler)
     {
         if (!module)
             return false;
 
-        bool changed = false;
+        bool result = true;
 
         // Scan all functions and search for allocas
         for (llvm::Function &F : *module)
@@ -798,7 +788,6 @@ namespace llvm_transformer
 
                 // Mark old alloca for removal
                 instsToRemove.push_back(oldAlloca);
-                changed = true;
             }
 
             // Remove old instructions
@@ -806,15 +795,13 @@ namespace llvm_transformer
             {
                 if (!I->use_empty())
                 {
-                    // Safety check - should not happen if replaceAllocaUses worked correctly
-                    llvm::errs() << "Warning: Instruction not fully replaced before deletion: " << *I << "\n";
-                    continue;
+                    error_handler.addError(ErrorType::TRANSFORMATION_ERROR, "Instruction "+ I->getName().str() + "not fully replaced before deletion.");
+                    result = false;
                 }
                 I->eraseFromParent();
             }
         }
-
-        return changed;
+        return result;
     }
     
     static inline Result<TransformResult> transform(const std::string_view& input_ir, llvm::LLVMContext& context, ErrorHandler& error_handler, const TransformOptions& options = {})
@@ -852,9 +839,9 @@ namespace llvm_transformer
         // Fix alloca address spaces for GPU targets
         if (options.amdgcn_target != AMDGCNTarget::GENERIC)
         {
-            if (fixAllocaAddressSpaces(module.get()))
+            if (!fixAllocaAddressSpaces(module.get(), error_handler))
             {
-                llvm::outs() << "Fixed alloca address spaces for AMDGCN target\n";
+                return Result<TransformResult>(std::move(error_handler));
             }
         }
 
