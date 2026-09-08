@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////////////////////////
-// 
+//
 //  Copyright (c) 2025 Advanced Micro Devices, Inc. All Rights Reserved.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,6 +27,7 @@
 #include <vector>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 
 namespace llvm_transformer {
 
@@ -51,13 +52,13 @@ struct ErrorInfo {
     std::string details;
     std::optional<size_t> line_number;
     std::optional<size_t> column_number;
-    
-    ErrorInfo(ErrorType t, ErrorSeverity s, const std::string& msg, 
-              const std::string& det = "", 
+
+    ErrorInfo(ErrorType t, ErrorSeverity s, const std::string& msg,
+              const std::string& det = "",
               std::optional<size_t> line = std::nullopt,
               std::optional<size_t> col = std::nullopt)
         : type(t), severity(s), message(msg), details(det), line_number(line), column_number(col) {}
-    
+
     std::string toString() const;
 };
 
@@ -65,54 +66,54 @@ class ErrorHandler {
 public:
     ErrorHandler() = default;
     ~ErrorHandler() = default;
-    
+
     // Add errors
     void addError(ErrorType type, const std::string& message, const std::string& details = "");
     void addWarning(ErrorType type, const std::string& message, const std::string& details = "");
     void addFatal(ErrorType type, const std::string& message, const std::string& details = "");
-    
+
     // Add errors with location info
     void addError(ErrorType type, const std::string& message, size_t line, size_t column = 0, const std::string& details = "");
     void addWarning(ErrorType type, const std::string& message, size_t line, size_t column = 0, const std::string& details = "");
-    
+
     // Query methods
     bool hasErrors() const;
     bool hasWarnings() const;
     bool hasFatalErrors() const;
     bool hasAnyIssues() const;
-    
+
     size_t getErrorCount() const;
     size_t getWarningCount() const;
     size_t getFatalErrorCount() const;
-    
+
     // Get errors
     const std::vector<ErrorInfo>& getAllErrors() const { return errors_; }
     std::vector<ErrorInfo> getErrorsByType(ErrorType type) const;
     std::vector<ErrorInfo> getErrorsBySeverity(ErrorSeverity severity) const;
-    
+
     // Output methods
     std::string getFormattedErrors() const;
     std::string getFormattedWarnings() const;
     std::string getFormattedAll() const;
-    
+
     void printErrors() const;
     void printWarnings() const;
     void printAll() const;
-    
+
     // Clear errors
     void clear();
     void clearWarnings();
     void clearErrors();
-    
+
     // Static helper methods
     static std::string errorTypeToString(ErrorType type);
     static std::string severityToString(ErrorSeverity severity);
 
 private:
     std::vector<ErrorInfo> errors_;
-    
-    void addErrorInfo(ErrorType type, ErrorSeverity severity, const std::string& message, 
-                      const std::string& details = "", 
+
+    void addErrorInfo(ErrorType type, ErrorSeverity severity, const std::string& message,
+                      const std::string& details = "",
                       std::optional<size_t> line = std::nullopt,
                       std::optional<size_t> column = std::nullopt);
 };
@@ -126,18 +127,18 @@ public:
     Result(const T& value) : value_(value), has_value_(true) {}
     Result(ErrorHandler&& error_handler) : error_handler_(std::move(error_handler)), has_value_(false) {}
     Result(const ErrorHandler& error_handler) : error_handler_(error_handler), has_value_(false) {}
-    
+
     bool hasValue() const { return has_value_; }
     bool hasError() const { return !has_value_; }
 
-    const T& getValue() const { 
+    const T& getValue() const {
         if (!has_value_) throw std::runtime_error("Attempting to get value from failed result");
-        return value_; 
+        return value_;
     }
-    
-    T& getValue() { 
+
+    T& getValue() {
         if (!has_value_) throw std::runtime_error("Attempting to get value from failed result");
-        return value_; 
+        return value_;
     }
 
     void setBinaryData(uint8_t* data, size_t size) {
@@ -147,12 +148,12 @@ public:
         binary_data_.clear();
         binary_data_.reserve(size);
         binary_data_.assign(data, data + size);
-        has_binary_ = true; 
+        has_binary_ = true;
     }
 
     const ErrorHandler& getErrorHandler() const { return error_handler_; }
     ErrorHandler& getErrorHandler() { return error_handler_; }
-    
+
     // Convenience methods
     operator bool() const { return has_value_; }
     const T& operator*() const { return getValue(); }
@@ -160,8 +161,9 @@ public:
 
 private:
     T value_{};
-   
+
     ErrorHandler error_handler_;
+	std::string binary_data_;
     bool has_value_;
     bool has_binary_ = false; // Indicates if the result contains binary data
 };
