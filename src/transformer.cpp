@@ -83,7 +83,7 @@ namespace llvm_transformer
 
     using SingleAttributeValue = std::string;
     using AttributeWithValue = std::pair<std::string, std::string>;
-    
+
     static std::vector<AttributeWithValue> GetDefaultFastMathFeatures()
     {
         return {
@@ -98,16 +98,16 @@ namespace llvm_transformer
 
     static void cleanModuleForAMDGCN(llvm::Module* module, const TransformOptions& options) {
         if (!module) return;
-        
+
         // 1. Remove NVIDIA-specific metadata
         if (auto nvvm_annotations = module->getNamedMetadata("nvvm.annotations")) {
             module->eraseNamedMetadata(nvvm_annotations);
         }
-        
+
         if (auto nvvmir_version = module->getNamedMetadata("nvvmir.version")) {
             module->eraseNamedMetadata(nvvmir_version);
         }
-        
+
         // 2. Set AMDGCN target triple
         if (!options.target_triple.empty()) {
             module->setTargetTriple(options.target_triple);
@@ -116,7 +116,7 @@ namespace llvm_transformer
         }
 
         module->setDataLayout(getAMDGCNDataLayout());
-        
+
         // 3. Clean and update function attributes
         for (auto& function : *module) {
             if (function.isDeclaration()) continue;
@@ -127,12 +127,12 @@ namespace llvm_transformer
                 // function.setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
                 //remove all function attributes
                 function.setAttributes(llvm::AttributeList());
-                
+
                 function.addFnAttr(llvm::Attribute::Convergent);
                 function.addFnAttr(llvm::Attribute::MustProgress);
                 function.addFnAttr(llvm::Attribute::NoReturn);
                 function.addFnAttr(llvm::Attribute::NoUnwind);
-            
+
                 for (const auto& amdgcnAttr: GetTargetFeaturesFor(options.amdgcn_target)) {
                     function.addFnAttr("target-features", amdgcnAttr);
                 }
@@ -150,17 +150,17 @@ namespace llvm_transformer
 
                 //function.addFnAttr("amdgpu-flat-work-group-size", "1,256");
                 function.addFnAttr("target-cpu", getAMDGCNCPUTarget(options.amdgcn_target));
-                
+
                 // Remove function attributes that don't make sense for kernels
                 function.removeFnAttr(llvm::Attribute::AlwaysInline);
-                
+
                 // Ensure proper linkage for kernel
                 if (function.hasInternalLinkage()) {
                     function.setLinkage(llvm::GlobalValue::ExternalLinkage);
                 }
             }
         }
-        
+
         // 4. Clean up compiler identification metadata
         if (options.remove_compiler_info) {
             if (auto llvm_ident = module->getNamedMetadata("llvm.ident")) {
@@ -171,30 +171,30 @@ namespace llvm_transformer
 
     static void cleanModuleForTargetIndependence(llvm::Module* module, const TransformOptions& options = {}) {
         if (!module) return;
-        
+
         // 1. Remove NVIDIA-specific metadata
         if (auto nvvm_annotations = module->getNamedMetadata("nvvm.annotations")) {
             module->eraseNamedMetadata(nvvm_annotations);
         }
-        
+
         if (auto nvvmir_version = module->getNamedMetadata("nvvmir.version")) {
             module->eraseNamedMetadata(nvvmir_version);
         }
-        
+
         // 2. Clean target-specific function attributes
         for (auto& function : *module) {
             if (function.isDeclaration()) continue;
-            
+
             // Remove PTX-specific attributes
             function.removeFnAttr("target-features");
         }
-        
+
         // 3. Optionally neutralize target triple for portability
         if (options.neutralize_target) {
             module->setTargetTriple(""); // or a generic triple
             module->setDataLayout("");
         }
-        
+
         // 4. Clean up compiler identification metadata
         if (options.remove_compiler_info) {
             if (auto llvm_ident = module->getNamedMetadata("llvm.ident")) {
@@ -217,7 +217,7 @@ namespace llvm_transformer
         auto module = llvm::parseIR(*memory_buffer, parse_error, context);
         if (!module)
         {
-            error_handler.addError(ErrorType::PARSING_ERROR, 
+            error_handler.addError(ErrorType::PARSING_ERROR,
                                  "Failed to parse LLVM IR",
                                  parse_error.getMessage().str());
             return nullptr;
@@ -230,58 +230,58 @@ namespace llvm_transformer
     {
         ErrorHandler error_handler;
         ModuleValidationResult validation_result;
-        
+
         if (!module) {
             error_handler.addError(ErrorType::VALIDATION_ERROR, "Module is null");
             return Result<ModuleValidationResult>(std::move(error_handler));
         }
-        
+
         // Run LLVM verifier
         std::string error_msg;
         llvm::raw_string_ostream error_stream(error_msg);
         if (llvm::verifyModule(*module, &error_stream)) {
-            error_handler.addError(ErrorType::VALIDATION_ERROR, 
-                                  "Module verification failed", 
+            error_handler.addError(ErrorType::VALIDATION_ERROR,
+                                  "Module verification failed",
                                   error_msg);
             return Result<ModuleValidationResult>(std::move(error_handler));
         }
-        
+
         // Count functions and analyze content
         validation_result.function_count = module->size();
-        
+
         for (const auto& function : *module) {
             if (!function.empty()) {
                 validation_result.functions_with_body++;
-                
+
                 // Count instructions
                 for (const auto& bb : function) {
                     validation_result.total_instructions += bb.size();
                 }
             }
         }
-        
+
         // Check for global variables
         validation_result.has_global_variables = !module->global_empty();
-        
+
         // Validation criteria
         if (validation_result.function_count == 0 && !validation_result.has_global_variables) {
-            error_handler.addError(ErrorType::VALIDATION_ERROR, 
+            error_handler.addError(ErrorType::VALIDATION_ERROR,
                                   "Module contains no functions or global variables");
             return Result<ModuleValidationResult>(std::move(error_handler));
         }
-        
+
         if (validation_result.functions_with_body == 0 && !validation_result.has_global_variables) {
-            error_handler.addError(ErrorType::VALIDATION_ERROR, 
+            error_handler.addError(ErrorType::VALIDATION_ERROR,
                                   "Module contains only function declarations and no global variables");
             return Result<ModuleValidationResult>(std::move(error_handler));
         }
-        
+
         if (validation_result.total_instructions < 2) {
-            error_handler.addWarning(ErrorType::VALIDATION_ERROR, 
+            error_handler.addWarning(ErrorType::VALIDATION_ERROR,
                                     "Module contains very few instructions",
                                     "Total instructions: " + std::to_string(validation_result.total_instructions));
         }
-        
+
         validation_result.is_valid = true;
         return Result<ModuleValidationResult>(std::move(validation_result));
     }
@@ -289,7 +289,7 @@ namespace llvm_transformer
     /*
     // The following functions are for inserting AMD GPU printf calls
     // They mimic the __ockl_printf_* functions used in AMD GPU assembly.
-    
+
     declare i64 @__ockl_printf_begin(i64)
 
     declare i64 @__ockl_printf_append_string_n(i64, ptr, i64, i32)
@@ -297,34 +297,34 @@ namespace llvm_transformer
     declare i64 @__ockl_printf_append_args(i64, i32, i64, i64, i64, i64, i64, i64, i64, i32)
     */
 
-    static void insertAMDGPUPrintf(llvm::IRBuilder<>& builder, llvm::Module* module, 
+    static void insertAMDGPUPrintf(llvm::IRBuilder<>& builder, llvm::Module* module,
                                    const std::string& format_str, llvm::Value* int_arg) {
         llvm::LLVMContext& context = module->getContext();
-        
+
         // Get or create __ockl_printf_* function declarations
         llvm::FunctionType* printf_begin_type = llvm::FunctionType::get(
-            llvm::Type::getInt64Ty(context), 
-            {llvm::Type::getInt64Ty(context)}, 
+            llvm::Type::getInt64Ty(context),
+            {llvm::Type::getInt64Ty(context)},
             false
         );
-        
+
         llvm::Function* printf_begin_func = module->getFunction("__ockl_printf_begin");
         if (!printf_begin_func) {
             printf_begin_func = llvm::Function::Create(
-                printf_begin_type, 
-                llvm::Function::ExternalLinkage, 
-                "__ockl_printf_begin", 
+                printf_begin_type,
+                llvm::Function::ExternalLinkage,
+                "__ockl_printf_begin",
                 *module
             );
         }
 
         llvm::FunctionType* printf_append_string_type = llvm::FunctionType::get(
             llvm::Type::getInt64Ty(context),
-            {llvm::Type::getInt64Ty(context), llvm::Type::getInt8PtrTy(context), 
+            {llvm::Type::getInt64Ty(context), llvm::Type::getInt8PtrTy(context),
              llvm::Type::getInt64Ty(context), llvm::Type::getInt32Ty(context)},
             false
         );
-        
+
         llvm::Function* printf_append_string_func = module->getFunction("__ockl_printf_append_string_n");
         if (!printf_append_string_func) {
             printf_append_string_func = llvm::Function::Create(
@@ -344,7 +344,7 @@ namespace llvm_transformer
              llvm::Type::getInt64Ty(context), llvm::Type::getInt32Ty(context)},
             false
         );
-        
+
         llvm::Function* printf_append_args_func = module->getFunction("__ockl_printf_append_args");
         if (!printf_append_args_func) {
             printf_append_args_func = llvm::Function::Create(
@@ -357,11 +357,11 @@ namespace llvm_transformer
 
         // Create global string constant in addrspace(4) - like @.str in device_code.ll
         llvm::ArrayType* string_type = llvm::ArrayType::get(
-            llvm::Type::getInt8Ty(context), 
+            llvm::Type::getInt8Ty(context),
             format_str.length() + 1
         );
         llvm::Constant* string_constant = llvm::ConstantDataArray::getString(context, format_str, true);
-        
+
         llvm::GlobalVariable* global_string = new llvm::GlobalVariable(
             *module,
             string_type,
@@ -378,25 +378,25 @@ namespace llvm_transformer
 
         // Step 1: Begin printf - call __ockl_printf_begin(i64 0)
         llvm::Value* printf_handle = builder.CreateCall(printf_begin_func, {builder.getInt64(0)});
-        
+
         // Step 2: Calculate string length and create addrspacecast
         // This mimics: addrspacecast (ptr addrspace(4) @.str to ptr)
         llvm::Value* string_ptr = builder.CreateAddrSpaceCast(
-            global_string, 
+            global_string,
             llvm::Type::getInt8PtrTy(context)
         );
-        
+
         // String length calculation (simpler version than device_code.ll's loop)
         llvm::Value* string_len = builder.getInt64(format_str.length());
-        
+
         // Step 3: Append string - call __ockl_printf_append_string_n
         llvm::Value* printf_handle2 = builder.CreateCall(printf_append_string_func, {
-            printf_handle, 
-            string_ptr, 
-            string_len, 
+            printf_handle,
+            string_ptr,
+            string_len,
             builder.getInt32(0)
         });
-        
+
         // Step 4: Append integer argument - call __ockl_printf_append_args
         llvm::Value* int_arg_64 = builder.CreateZExt(int_arg, llvm::Type::getInt64Ty(context));
         builder.CreateCall(printf_append_args_func, {
@@ -431,17 +431,17 @@ namespace llvm_transformer
         // Get or create printf function declaration
         llvm::LLVMContext& context = module->getContext();
         llvm::FunctionType* printf_type = llvm::FunctionType::get(
-            llvm::Type::getInt32Ty(context), 
-            llvm::Type::getInt8PtrTy(context), 
+            llvm::Type::getInt32Ty(context),
+            llvm::Type::getInt8PtrTy(context),
             true // varargs
         );
-        
+
         llvm::Function* printf_func = module->getFunction("printf");
         if (!printf_func) {
             printf_func = llvm::Function::Create(
-                printf_type, 
-                llvm::Function::ExternalLinkage, 
-                "printf", 
+                printf_type,
+                llvm::Function::ExternalLinkage,
+                "printf",
                 *module
             );
         }
@@ -457,15 +457,15 @@ namespace llvm_transformer
             }
             if (switch_inst) break;
         }
-        
+
         if (!switch_inst) {
             llvm::outs() << "No switch statement found in function '" << kernel_function_name << "'\n";
             return;
         }
-        
+
         // Create IRBuilder positioned before the switch instruction
         llvm::IRBuilder<> builder(switch_inst);
-        
+
         // Create format string with case values for better debugging
         std::string format_str = "Switch condition: %d (cases: ";
         for (auto case_it = switch_inst->case_begin(); case_it != switch_inst->case_end(); ++case_it) {
@@ -473,19 +473,19 @@ namespace llvm_transformer
             format_str += std::to_string(case_value) + ",";
         }
         format_str += "default)\\n";
-        
+
         llvm::Value* format_string = builder.CreateGlobalStringPtr(format_str);
-        
+
         // Get the switch condition value and insert printf call
         llvm::Value* switch_condition = switch_inst->getCondition();
         builder.CreateCall(printf_func, {format_string, switch_condition});
-        
-        llvm::outs() << "Successfully added debug printf for switch statement in function '" 
+
+        llvm::outs() << "Successfully added debug printf for switch statement in function '"
                      << kernel_function_name << "'\n";
     }
 
 
-    std::vector<std::string> GetTargetFeaturesFor(AMDGCNTarget target) 
+    std::vector<std::string> GetTargetFeaturesFor(AMDGCNTarget target)
     {
         std::vector<std::string> features;
         switch (target) {
@@ -576,25 +576,25 @@ namespace llvm_transformer
     }
 
     static inline Result<TransformResult> transform(const std::string_view& input_ir, llvm::LLVMContext& context, ErrorHandler& error_handler, const TransformOptions& options = {})
-    {       
+    {
         if (input_ir.empty()) {
             error_handler.addError(ErrorType::PARSING_ERROR, "Input IR is empty");
             return Result<TransformResult>(std::move(error_handler));
         }
-        
+
         // Parse the input
         auto module = parseIRFromStringView(input_ir, context, error_handler);
-        
+
         if (!module) {
             return Result<TransformResult>(std::move(error_handler));
         }
-        
+
         // Validate the module
         auto validation_result = validateModuleWithCode(module.get());
         if (!validation_result.hasValue()) {
             return Result<TransformResult>(validation_result.getErrorHandler());
         }
-        
+
         // Apply transformations based on options
         if (options.amdgcn_target != AMDGCNTarget::GENERIC || !options.target_triple.empty()) {
             cleanModuleForAMDGCN(module.get(), options);
@@ -606,10 +606,12 @@ namespace llvm_transformer
             enableDebugSwitchStatements(module.get(), options.kernel_function_name);
         }
 
+#ifdef WIN32
         overrideWcharSizeFlag(module.get(), 2);
+#endif
 
         TransformResult result;
-        
+
         if (options.output_bitcode) {
             // If bitcode output is requested, write to a binary format
             llvm::SmallVector<char> bitcode_data;
@@ -623,22 +625,22 @@ namespace llvm_transformer
             std::string text_ir;
             llvm::raw_string_ostream output_stream(text_ir);
             module->print(output_stream, nullptr);
-        
+
             result.data = std::move(text_ir);
             result.format = OutputFormat::TEXT_IR;
         }
-        
+
          return Result<TransformResult>(std::move(result));
     }
 
-   
-    
+
+
     Result<TransformResult> transform_llvm_ir_to_opaque_pointers(const std::string_view& input_ir, const TransformOptions& options)
     {
        // Set opaque pointers context
         llvm::LLVMContext context;
         context.setOpaquePointers(true);
-        
+
         ErrorHandler error_handler;
 
         return transform(input_ir, context, error_handler, options);

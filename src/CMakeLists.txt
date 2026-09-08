@@ -1,5 +1,6 @@
 
 set(target_name llvmtransformer)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if (BUILD_FOR_VRAY)
   set(llvm16_version 1606)
